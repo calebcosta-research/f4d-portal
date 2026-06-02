@@ -1,0 +1,19 @@
+venv/
+.env
+.posit/
+...existing code...
+__pycache__/
+*.pyc
+main_07052025.py
+superadmin_07052025.py
+app.py
+user.py
+delete_grants.py
+delete_users.py
+main_long.py
+model_sqlite.py
+main_wide.py
+.vscode/
+f4d.db
+*.db
+*.sqlite3

@@ -1,0 +1,7 @@
+dotenv
+matplotlib
+pandas==2.2.3
+plotly
+sqlalchemy
+streamlit
+pyodbc==5.2.0
