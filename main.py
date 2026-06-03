@@ -104,12 +104,82 @@ def normalize(value):
     return value if value is not None else ""
 
 
+def _resolve_grant_context():
+    """Ensure current_trustfund_id and current_fiscal_year_id are set in session state.
+
+    Called once before rendering any 'Report new results' section so that every
+    section can rely on these values being populated without each one having to
+    implement its own fallback logic.
+    """
+    tf_id = st.session_state.get("current_trustfund_id")
+    fy_id = st.session_state.get("current_fiscal_year_id")
+
+    # Nothing to do if both are already resolved
+    if tf_id and fy_id:
+        return
+
+    session = create_session()
+    try:
+        if not tf_id:
+            trustfund = session.query(TrustFund).filter(
+                TrustFund.name == current_username(),
+                TrustFund.team_id == current_team_id()
+            ).first()
+            if trustfund:
+                st.session_state.current_trustfund_id = trustfund.id
+                tf_id = trustfund.id
+
+        if tf_id and not fy_id:
+            # Don't auto-select a FY if the user is deliberately creating a new report
+            if st.session_state.get("bgi_creating_new"):
+                return
+            # Find the distinct fiscal years saved for this trustfund
+            saved_fy_rows = (
+                session.query(GrantInfo.fiscal_year_id)
+                .filter_by(trustfund_id=tf_id, deleted=False)
+                .distinct()
+                .all()
+            )
+            saved_fy_ids = [row[0] for row in saved_fy_rows if row[0] is not None]
+            if len(saved_fy_ids) == 1:
+                # Only one year exists — auto-select it
+                st.session_state.current_fiscal_year_id = saved_fy_ids[0]
+            # If multiple years exist, leave fy_id as None; basic_grant_info's
+            # switcher is the canonical place to choose between them.
+    finally:
+        session.close()
+
+
+def _show_report_mode_banner():
+    """Show a banner indicating whether the TTL is creating or editing their report."""
+    session = create_session()
+    try:
+        trustfund = session.query(TrustFund).filter(
+            TrustFund.name == current_username(),
+            TrustFund.team_id == current_team_id()
+        ).first()
+        if not trustfund:
+            return
+        existing = session.query(GrantInfo).filter_by(
+            trustfund_id=trustfund.id,
+            deleted=False
+        ).first()
+        if existing:
+            fy = existing.fiscal_year.fy if existing.fiscal_year else ""
+            st.info(f"✏️ Editing existing report — {fy}")
+        else:
+            st.info("➕ Creating new report")
+    except Exception:
+        pass
+    finally:
+        session.close()
+
+
 def display_main_app():
     # Define pages with subpages
     pages = {
           "Home": [home, None],
           "Report new results": [new_grant, None],
-          "Edit results": [all_grants, None],
           "Download results ": [download_grants, None],
     }
     
@@ -150,6 +220,39 @@ def display_main_app():
         "Outputs/deliverables": 'deliverables_unsaved_changes',
         "Results Indicators": 'custom_indicators_unsaved_changes'
     }
+
+    # Widget keys to wipe per section when the user chooses "Leave without saving"
+    section_discard_keys = {
+        "Basic Grant Information": [
+            "bgi_fiscal_year", "bgi_p_code_instrument", "bgi_p_code_description",
+            "bgi_f4d_association", "bgi_region", "bgi_country", "bgi_pillars", "bgi_ccts",
+            "Pillar 1: Strengthening Financial Sector Resiliency",
+            "Pillar 2: Financing the Poor and Vulnerable",
+            "Pillar 3: Financing the Real Economy",
+            "Pillar 4: Developing Financial Markets",
+            "Climate change and sustainable finance",
+            "Advancing digitalization",
+            "Financing solutions to close gender gaps",
+            "bgi_loaded_for_fy", "grant_info_initial_values",
+        ],
+        "Strategic Objective & Progress": [
+            "strat_challenges", "strat_strategic_objective", "strat_overall_progress",
+            "strat_implementation_challenges", "strat_public_communication_external",
+            "strat_public_communication_internal",
+            "strat_loaded_for_fy", "strategic_objective_initial_values",
+        ],
+        "Lending Operations": [
+            "operation_list", "cpfs_list",
+            "operations_unsaved_changes", "operations_initial_values",
+        ],
+        "Collaboration/Partnership": [
+            "collaborations_input", "other_teams_input", "other_ifis_input",
+            "other_orgs_input", "describe_collaboration_input", "lessons_learned_input",
+            "collab_loaded_for_fy", "collaboration_initial_values",
+        ],
+        "Outputs/deliverables": ["_deliverables_discard"],
+        "Results Indicators": ["_indicators_discard"],
+    }
     
     # Check for unsaved changes in current section
     has_unsaved_changes = False
@@ -170,9 +273,33 @@ def display_main_app():
         st.session_state.target_subpage = None
     
     def set_leave_without_saving():
-        # Clear unsaved changes flag
+        # Clear unsaved changes flag and discard widget state for the section being left
         if st.session_state.current_main_page == "Report new results" and st.session_state.current_subpage in unsaved_mapping:
             st.session_state[unsaved_mapping[st.session_state.current_subpage]] = False
+            for _k in section_discard_keys.get(st.session_state.current_subpage, []):
+                st.session_state.pop(_k, None)
+            # Deliverables / Results Indicators use dynamic keys — clear by prefix
+            _DELIVERABLE_PREFIXES = (
+                "date_input_", "number_input_", "short_text_input_", "long_text_input_",
+                "percentage_input_", "categorical_input_",
+                "progress_", "deliverable_quantity_", "next_steps_",
+                "supporting_materials_url_", "description_", "data_source_",
+            )
+            _INDICATOR_PREFIXES = (
+                "level_of_result_",
+                "date_input_", "number_input_", "short_text_input_", "long_text_input_",
+                "percentage_input_", "categorical_input_",
+                "baseline_value_", "year_baseline_", "progress_",
+                "target_value_", "year_target_", "data_collection_",
+            )
+            if st.session_state.current_subpage == "Outputs/deliverables":
+                for _k in list(st.session_state.keys()):
+                    if any(_k.startswith(p) for p in _DELIVERABLE_PREFIXES):
+                        del st.session_state[_k]
+            elif st.session_state.current_subpage == "Results Indicators":
+                for _k in list(st.session_state.keys()):
+                    if any(_k.startswith(p) for p in _INDICATOR_PREFIXES):
+                        del st.session_state[_k]
         
         st.session_state.show_warning = False
         
@@ -323,6 +450,7 @@ def display_main_app():
         home()
     elif current_main == "Report new results":
         _resolve_grant_context()
+        _show_report_mode_banner()
         if current_sub == "Basic Grant Information":
             basic_grant_info()
         elif current_sub == "Strategic Objective & Progress":
@@ -337,8 +465,6 @@ def display_main_app():
             custom_indicators()
         else:
             basic_grant_info()
-    elif current_main == "Edit results":
-        all_grants()
     elif current_main == "Download results ":
         download_grants()
     else:
@@ -397,49 +523,6 @@ def current_trustfund_id():
     return trustfund_id
 
 
-<<<<<<< HEAD
-=======
-def _resolve_grant_context():
-    """Ensure current_trustfund_id and current_fiscal_year_id are set in session state.
-
-    Called once before rendering any 'Report new results' section so that every
-    section can rely on these values being populated without each one having to
-    implement its own fallback logic.
-    """
-    tf_id = st.session_state.get("current_trustfund_id")
-    fy_id = st.session_state.get("current_fiscal_year_id")
-
-    if tf_id and fy_id:
-        return
-
-    session = create_session()
-    try:
-        if not tf_id:
-            trustfund = session.query(TrustFund).filter(
-                TrustFund.name == current_username(),
-                TrustFund.team_id == current_team_id()
-            ).first()
-            if trustfund:
-                st.session_state.current_trustfund_id = trustfund.id
-                tf_id = trustfund.id
-
-        if tf_id and not fy_id:
-            saved_fy_rows = (
-                session.query(GrantInfo.fiscal_year_id)
-                .filter_by(trustfund_id=tf_id, deleted=False)
-                .distinct()
-                .all()
-            )
-            saved_fy_ids = [row[0] for row in saved_fy_rows if row[0] is not None]
-            if len(saved_fy_ids) == 1:
-                st.session_state.current_fiscal_year_id = saved_fy_ids[0]
-            # If multiple years exist, leave fy_id as None; basic_grant_info's
-            # switcher is the canonical place to choose between them.
-    finally:
-        session.close()
-
-
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 def home():
     st.session_state.current_trustfund_id = None
     st.session_state.current_fiscal_year_id = None
@@ -465,7 +548,6 @@ The application is organized into multiple pages, one of them containing specifi
 <i>Collaboration/Partnership:</i> Manage collaboration and partnership details.<br/>
 <i>Outputs/deliverables:</i> Enter and manage outputs and deliverables.<br/>
 <i>Results Indicators:</i> Define and manage results indicators for the grant.<br/>
-<u>Edit results:</u> View and edit existing grants.<br/>
 <u>Download results:</u> Download grant data in CSV formats.<br/>
 
              
@@ -503,12 +585,6 @@ def basic_grant_info():
 
     print(st.session_state.current_trustfund_id, st.session_state.current_fiscal_year_id)
 
-<<<<<<< HEAD
-    existing_grant_info = session.query(GrantInfo).filter_by(
-        trustfund_id=st.session_state.current_trustfund_id,
-        fiscal_year_id=st.session_state.current_fiscal_year_id
-    ).first()
-=======
     # Resolve the effective trustfund_id — session state may be None if user came from Home
     effective_trustfund_id = st.session_state.current_trustfund_id or current_trustfund_id()
 
@@ -528,35 +604,72 @@ def basic_grant_info():
     # Build a mapping of fy label → id for the fiscal years that have saved data
     saved_fy_options = [(fy_label, fy_id) for fy_label, fy_id in data["fiscal_years"] if fy_id in saved_fy_ids]
 
-    # Show a fiscal year switcher when more than one year of data exists
-    if len(saved_fy_options) > 1:
-        fy_labels = [opt[0] for opt in saved_fy_options]
-        current_fy_id = st.session_state.current_fiscal_year_id
-        current_fy_index = next((i for i, opt in enumerate(saved_fy_options) if opt[1] == current_fy_id), 0)
+    _NEW_LABEL = "➕ New fiscal year report"
+
+    # Show the FY switcher whenever at least one saved year exists so the user
+    # can both switch between existing years and start a new one.
+    if len(saved_fy_options) >= 1:
+        switcher_labels = [_NEW_LABEL] + [opt[0] for opt in saved_fy_options]
+        creating_new = st.session_state.get("bgi_creating_new", False)
+
+        if creating_new or st.session_state.current_fiscal_year_id is None:
+            current_switcher_index = 0  # "➕ New fiscal year report"
+        else:
+            current_switcher_index = next(
+                (i + 1 for i, opt in enumerate(saved_fy_options)
+                 if opt[1] == st.session_state.current_fiscal_year_id),
+                1  # default to the first saved FY if not found
+            )
 
         def _on_fy_switch():
-            selected_label = st.session_state["_fy_switcher"]
-            st.session_state.current_fiscal_year_id = next(
-                (opt[1] for opt in saved_fy_options if opt[0] == selected_label), None
-            )
-            # Clear cached initial values so the form reloads for the new year
+            selected = st.session_state["_fy_switcher"]
+            if selected == _NEW_LABEL:
+                st.session_state.bgi_creating_new = True
+                st.session_state.current_fiscal_year_id = None
+            else:
+                st.session_state.bgi_creating_new = False
+                st.session_state.current_fiscal_year_id = next(
+                    (opt[1] for opt in saved_fy_options if opt[0] == selected), None
+                )
             st.session_state.pop("grant_info_initial_values", None)
 
         st.selectbox(
-            "Select fiscal year to edit:",
-            fy_labels,
-            index=current_fy_index,
+            "Existing report(s):",
+            switcher_labels,
+            index=current_switcher_index,
             key="_fy_switcher",
             on_change=_on_fy_switch,
         )
-        # Ensure current_fiscal_year_id matches the switcher selection
-        if st.session_state.current_fiscal_year_id is None and saved_fy_options:
+    elif len(saved_fy_options) == 0:
+        # No saved data yet — new user, form will be blank
+        st.session_state.bgi_creating_new = False
+    else:
+        # Exactly one saved FY and no switcher shown — auto-select it
+        if st.session_state.current_fiscal_year_id is None:
             st.session_state.current_fiscal_year_id = saved_fy_options[0][1]
-    elif len(saved_fy_options) == 1 and st.session_state.current_fiscal_year_id is None:
-        st.session_state.current_fiscal_year_id = saved_fy_options[0][1]
 
-    # Load the existing record for the currently selected fiscal year
-    if st.session_state.current_fiscal_year_id is not None:
+    # Clear all form widget keys whenever the fiscal year changes so fields reload from DB
+    _BGI_WIDGET_KEYS = [
+        "bgi_fiscal_year", "bgi_p_code_instrument", "bgi_p_code_description",
+        "bgi_f4d_association", "bgi_region", "bgi_country", "bgi_pillars", "bgi_ccts",
+        "Pillar 1: Strengthening Financial Sector Resiliency",
+        "Pillar 2: Financing the Poor and Vulnerable",
+        "Pillar 3: Financing the Real Economy",
+        "Pillar 4: Developing Financial Markets",
+        "Climate change and sustainable finance",
+        "Advancing digitalization",
+        "Financing solutions to close gender gaps",
+    ]
+    # Use a sentinel so "creating new" (fy_id=None) is treated as its own stable state
+    _loaded_key = ("new" if st.session_state.get("bgi_creating_new") else st.session_state.current_fiscal_year_id)
+    if st.session_state.get("bgi_loaded_for_fy") != _loaded_key:
+        for _k in _BGI_WIDGET_KEYS:
+            st.session_state.pop(_k, None)
+        st.session_state.pop("grant_info_initial_values", None)
+        st.session_state["bgi_loaded_for_fy"] = _loaded_key
+
+    # Load the existing record for the currently selected fiscal year (None when creating new)
+    if not st.session_state.get("bgi_creating_new") and st.session_state.current_fiscal_year_id is not None:
         existing_grant_info = session.query(GrantInfo).filter_by(
             trustfund_id=effective_trustfund_id,
             fiscal_year_id=st.session_state.current_fiscal_year_id,
@@ -564,7 +677,6 @@ def basic_grant_info():
         ).first()
     else:
         existing_grant_info = None
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
     # Initialize variables
     trustfund_id, fiscal_year_id = None, None
@@ -651,21 +763,23 @@ def basic_grant_info():
     fiscal_year = st.selectbox("Fiscal Year: *",
                                 [option[0] for option in data["fiscal_years"]],
                                 index=None if not fiscal_year_id else next(
-                                    (i for i, option in enumerate(data["fiscal_years"]) if option[1] == fiscal_year_id), None))
+                                    (i for i, option in enumerate(data["fiscal_years"]) if option[1] == fiscal_year_id), None),
+                                key="bgi_fiscal_year")
 
     # Update fiscal_year_id
     fiscal_year_id = next((fy[1] for fy in data["fiscal_years"] if fy[0] == fiscal_year), None)
 
     # P Code Instrument Selection
     p_code_instrument = st.selectbox(
-        "Product line/instrument: *", 
-        ["ASA", "IPF", "PforR", "DPF", "Other"], 
-        index=["ASA", "IPF", "PforR", "DPF", "Other"].index(p_code_instrument) if p_code_instrument in ["ASA", "IPF", "PforR", "DPF", "Other"] else None
+        "Product line/instrument: *",
+        ["ASA", "IPF", "PforR", "DPF", "Other"],
+        index=["ASA", "IPF", "PforR", "DPF", "Other"].index(p_code_instrument) if p_code_instrument in ["ASA", "IPF", "PforR", "DPF", "Other"] else None,
+        key="bgi_p_code_instrument"
     )
 
     # Handle "Other" selection
     if p_code_instrument == "Other":
-        p_code_description = st.text_input("If other, please describe:", value=p_code_description or "")
+        p_code_description = st.text_input("If other, please describe:", value=p_code_description or "", key="bgi_p_code_description")
     else:
         p_code_description = None
 
@@ -675,7 +789,8 @@ def basic_grant_info():
         ["Yes, this P code is used solely for F4D funded activities",
          "No, this P code is used for activities supported by other funding sources (e.g., other Trust Funds) as well."],
         index=None if not f4d_association else ["Yes, this P code is used solely for F4D funded activities",
-                                                 "No, this P code is used for activities supported by other funding sources (e.g., other Trust Funds) as well."].index(f4d_association)
+                                                 "No, this P code is used for activities supported by other funding sources (e.g., other Trust Funds) as well."].index(f4d_association),
+        key="bgi_f4d_association"
     )
 
     # Set F4D Association Enum
@@ -686,20 +801,19 @@ def basic_grant_info():
     else:
         f4d_association = None
 
-
     # Region Selection
     region = st.selectbox("Region: *",
                             [option[0] for option in data["regions"]],
                             index=None if not region_id else next(
-                                (i for i, option in enumerate(data["regions"]) if option[1] == region_id), None))
+                                (i for i, option in enumerate(data["regions"]) if option[1] == region_id), None),
+                            key="bgi_region")
     # Update region_id
     if region:
         region_id = next((r[1] for r in data["regions"] if r[0] == region), None)
 
-
     # Country Selection
     default_countries = country.split(', ') if isinstance(country, str) else country or []
-    country = st.multiselect("Country (multiple choice): *", sorted([c[0] for c in data["countries"]]), default=default_countries)
+    country = st.multiselect("Country (multiple choice): *", sorted([c[0] for c in data["countries"]]), default=default_countries, key="bgi_country")
 
     # Pillars Selection
     pillars = st.multiselect("Select the pillar(s) this grant contributes to (multiple choice): *",
@@ -707,7 +821,8 @@ def basic_grant_info():
                               "Pillar 2: Financing the Poor and Vulnerable",
                               "Pillar 3: Financing the Real Economy",
                               "Pillar 4: Developing Financial Markets"],
-                             default=pillars)
+                             default=pillars,
+                             key="bgi_pillars")
 
     # Explanations
     for pillar in pillars:
@@ -715,11 +830,12 @@ def basic_grant_info():
         pillar_explanations[pillar] = explanation
 
     # CCTs Selection
-    ccts = st.multiselect("Select the cross-cutting theme(s) this grant contributes to and explain how (multiple choice):", 
-                          ["Climate change and sustainable finance", 
-                           "Advancing digitalization", 
+    ccts = st.multiselect("Select the cross-cutting theme(s) this grant contributes to and explain how (multiple choice):",
+                          ["Climate change and sustainable finance",
+                           "Advancing digitalization",
                            "Financing solutions to close gender gaps"],
-                          default=ccts)
+                          default=ccts,
+                          key="bgi_ccts")
 
     # CCT Explanations
     for cct in ccts:
@@ -834,6 +950,8 @@ def basic_grant_info():
                     st.session_state.grant_info_unsaved_changes = False
                     st.session_state.current_trustfund_id = trustfund_id
                     st.session_state.current_fiscal_year_id = fiscal_year_id
+                    st.session_state.bgi_creating_new = False
+                    st.session_state.bgi_loaded_for_fy = fiscal_year_id
                     st.success("Grant information saved successfully!")
             else:
                 st.error(f"Please fill in all mandatory fields: {', '.join(missing_fields)}")
@@ -847,6 +965,22 @@ def basic_grant_info():
 
 def strategic_objective_progress():
     st.success("### 2. Strategic Objective & Progress")
+
+    if not st.session_state.current_fiscal_year_id:
+        st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
+        return
+
+    # Clear widget keys whenever the fiscal year changes so fields reload from DB
+    _STRAT_KEYS = [
+        "strat_challenges", "strat_strategic_objective", "strat_overall_progress",
+        "strat_implementation_challenges", "strat_public_communication_external",
+        "strat_public_communication_internal",
+    ]
+    if st.session_state.get("strat_loaded_for_fy") != st.session_state.current_fiscal_year_id:
+        for _k in _STRAT_KEYS:
+            st.session_state.pop(_k, None)
+        st.session_state.pop("strategic_objective_initial_values", None)
+        st.session_state["strat_loaded_for_fy"] = st.session_state.current_fiscal_year_id
 
     # Create a new session
     session = create_session()
@@ -907,32 +1041,38 @@ def strategic_objective_progress():
     challenges = st.text_area(
         "Challenges the grant is going to address *",
         value=challenges,
-        placeholder="What is the key challenge(s) the client country faces that this grant intends to address?"
+        placeholder="What is the key challenge(s) the client country faces that this grant intends to address?",
+        key="strat_challenges"
     )
     strategic_objective = st.text_area(
         "Grant's strategic objective (Max 200 words) *",
         value=strategic_objective,
-        placeholder="What the grant is expected to achieve to address the challenges. Max. 200 words."
+        placeholder="What the grant is expected to achieve to address the challenges. Max. 200 words.",
+        key="strat_strategic_objective"
     )
     overall_progress = st.text_area(
         "Overall progress since inception *",
         value=overall_progress,
-        placeholder="Please provide a short summary of the overall progress since inception of the grant towards achieving the strategic objective, with a focus on progress towards outcomes instead of listing deliverables. Include details including developments in client support/interest, coordination and partnerships with other donors, development partners and/or other WB units and IFC; include any relevant lessons learned."
+        placeholder="Please provide a short summary of the overall progress since inception of the grant towards achieving the strategic objective, with a focus on progress towards outcomes instead of listing deliverables. Include details including developments in client support/interest, coordination and partnerships with other donors, development partners and/or other WB units and IFC; include any relevant lessons learned.",
+        key="strat_overall_progress"
     )
     implementation_challenges = st.text_area(
         "Implementation Challenges",
         value=implementation_challenges,
-        placeholder="Please provide any challenges faced so far, any external or unexpected events that affect the implementation or results."
+        placeholder="Please provide any challenges faced so far, any external or unexpected events that affect the implementation or results.",
+        key="strat_implementation_challenges"
     )
     public_communication_external = st.text_area(
         "Public communication (external)",
         value=public_communication_external,
-        placeholder="List external public communications that took place. Examples include a link to a press release, an external conference, counterpart quotes, newspaper, journals, articles, blogs, website, data infographics, brochures, booklet, reports, TV, YouTube video, photos, etc. Send attachments to financefordevelopment@worldbank.org if there is no link."
+        placeholder="List external public communications that took place. Examples include a link to a press release, an external conference, counterpart quotes, newspaper, journals, articles, blogs, website, data infographics, brochures, booklet, reports, TV, YouTube video, photos, etc. Send attachments to financefordevelopment@worldbank.org if there is no link.",
+        key="strat_public_communication_external"
     )
     public_communication_internal = st.text_area(
         "Public communication (internal)",
         value=public_communication_internal,
-        placeholder="List any World Bank intranet appearances (such as links to blog posts, feature stories, Up Front story, photos of internal events, data infographics, etc.). Send attachments to financefordevelopment@worldbank.org if there is no link."
+        placeholder="List any World Bank intranet appearances (such as links to blog posts, feature stories, Up Front story, photos of internal events, data infographics, etc.). Send attachments to financefordevelopment@worldbank.org if there is no link.",
+        key="strat_public_communication_internal"
     )
 
     # Check for changes in form values
@@ -1026,6 +1166,10 @@ def strategic_objective_progress():
 
 def lending_operations():
     st.success("### 3. Operations Informed and Country Engagements Informed by F4D")
+
+    if not st.session_state.current_fiscal_year_id:
+        st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
+        return
 
     operations()
     cpfs()
@@ -1553,6 +1697,21 @@ def deep_copy_cpfs(cpfs_list):
 def collaboration_partnership():
     st.success("### 4. Collaboration/Partnership")
 
+    if not st.session_state.current_fiscal_year_id:
+        st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
+        return
+
+    # Clear widget keys whenever the fiscal year changes so fields reload from DB
+    _COLLAB_KEYS = [
+        "collaborations_input", "other_teams_input", "other_ifis_input",
+        "other_orgs_input", "describe_collaboration_input", "lessons_learned_input",
+    ]
+    if st.session_state.get("collab_loaded_for_fy") != st.session_state.current_fiscal_year_id:
+        for _k in _COLLAB_KEYS:
+            st.session_state.pop(_k, None)
+        st.session_state.pop("collaboration_initial_values", None)
+        st.session_state["collab_loaded_for_fy"] = st.session_state.current_fiscal_year_id
+
     # Create a new session
     session = create_session()
 
@@ -1849,10 +2008,14 @@ def get_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_y
 
 def deliverables():
     st.success("### 5. Outputs/deliverables")
-    
+
+    if not st.session_state.current_fiscal_year_id:
+        st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
+        return
+
     # Create a session
     session = create_session()
-    
+
     # Fetch existing indicators based on current grant ID
     existing_grant_info = session.query(GrantInfo).filter_by(
         trustfund_id=st.session_state.current_trustfund_id, fiscal_year_id=st.session_state.current_fiscal_year_id, deleted=False).first()
@@ -1899,10 +2062,7 @@ def deliverables():
                     str(mapping.indicator_id): {
                         "input_value": deliverables_data.get(str(mapping.indicator_id), {}).get("input_value", None),
                         "progress": deliverables_data.get(str(mapping.indicator_id), {}).get("progress", ""),
-<<<<<<< HEAD
-=======
                         "deliverable_quantity": deliverables_data.get(str(mapping.indicator_id), {}).get("deliverable_quantity", ""),
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                         "description": deliverables_data.get(str(mapping.indicator_id), {}).get("description", ""),
                         "data_source": deliverables_data.get(str(mapping.indicator_id), {}).get("data_source", ""),
                         "next_steps": deliverables_data.get(str(mapping.indicator_id), {}).get("next_steps", ""),
@@ -1929,10 +2089,7 @@ def deliverables():
             # Pre-fill the input field with existing data if available
             input_value = deliverables_data.get(str(mapping.indicator_id), {}).get("input_value", None)
             progress = deliverables_data.get(str(mapping.indicator_id), {}).get("progress", "")
-<<<<<<< HEAD
-=======
             deliverable_quantity = deliverables_data.get(str(mapping.indicator_id), {}).get("deliverable_quantity", "")
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
             description = deliverables_data.get(str(mapping.indicator_id), {}).get("description", "")
             data_source = deliverables_data.get(str(mapping.indicator_id), {}).get("data_source", "")
             next_steps = deliverables_data.get(str(mapping.indicator_id), {}).get("next_steps", "")
@@ -1960,10 +2117,7 @@ def deliverables():
             st.session_state.deliverables_initial_values[str(mapping.indicator_id)] = {
                 "input_value": input_value if input_value else None,
                 "progress": progress,
-<<<<<<< HEAD
-=======
                 "deliverable_quantity": deliverable_quantity,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                 "description": description,
                 "data_source": data_source,
                 "next_steps": next_steps,
@@ -2016,15 +2170,9 @@ def deliverables():
 
                     # Display the select box with dynamically loaded categories
                     input_value = st.selectbox(
-<<<<<<< HEAD
-                        f"{indicator.indicator_prompt} {mandatory_char}", 
-                        categories, 
-                        index=categories.index(input_value) if input_value in categories else None, 
-=======
                         f"{indicator.indicator_prompt} {mandatory_char}",
                         categories,
                         index=categories.index(input_value) if input_value in categories else None,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                         key=f"categorical_input_{mapping.id}"
                     )
                 else:
@@ -2038,8 +2186,6 @@ def deliverables():
                     key=f"progress_{mapping.id}",
                 )
 
-<<<<<<< HEAD
-=======
                 deliverable_quantity = st.text_input(
                     "Deliverable quantity",
                     placeholder="Enter the number or quantity of this deliverable (e.g., number of MSMEs informed, number of reports produced).",
@@ -2047,7 +2193,6 @@ def deliverables():
                     key=f"deliverable_quantity_{mapping.id}",
                 )
 
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                 next_steps = st.text_area(
                     "Next steps and any required adjustments in FY",
                     value=next_steps,
@@ -2081,10 +2226,7 @@ def deliverables():
                 deliverables_data[str(mapping.indicator_id)].update({
                     "input_value": input_value,
                     "progress": progress,
-<<<<<<< HEAD
-=======
                     "deliverable_quantity": deliverable_quantity,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                     "description": description,
                     "data_source": data_source,
                     "next_steps": next_steps,
@@ -2095,10 +2237,7 @@ def deliverables():
                 deliverables_data[str(mapping.indicator_id)] = {
                     "input_value": input_value,
                     "progress": progress,
-<<<<<<< HEAD
-=======
                     "deliverable_quantity": deliverable_quantity,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                     "description": description,
                     "data_source": data_source,
                     "next_steps": next_steps,
@@ -2276,6 +2415,10 @@ def get_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_
 
 def custom_indicators():
     st.success("### 6. Results Indicators")
+
+    if not st.session_state.current_fiscal_year_id:
+        st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
+        return
 
     # Create a session
     session = create_session()
@@ -2658,24 +2801,6 @@ def all_grants():
                 grant_info_display = f"Grant ID: {trustfund_name} | Fiscal Year: {fiscal_year}"
 
                 with st.expander(grant_info_display):
-<<<<<<< HEAD
-                    #for grant_info_indx, grant_info in enumerate(grant_info_list):
-                        st.markdown(
-                            f"[1. Basic Grant Information](#section-1-{grant_info_indx})")
-                        st.markdown(
-                            f"[2. Strategic Objective & Progress](#section-2-{grant_info_indx}))")
-                        st.markdown(
-                            f"[3. Operations Informed and Country Engagements Informed by F4D](#section-3-{grant_info_indx}))")
-                        st.markdown(
-                            f"[4. Collaboration/Partnership](#section-4-{grant_info_indx})")
-                        st.markdown(
-                            f"[5. Outputs/deliverables](#section-5-{grant_info_indx})")
-                        st.markdown(
-                            f"[6. Results Indicators](#section-6-{grant_info_indx})")
-                        
-                        st.subheader("1. Basic Grant Information",
-                                    anchor=f"section-1-{grant_info_indx}")
-=======
                     _sec_tabs = st.tabs([
                         "1. Basic Grant Information",
                         "2. Strategic Objective & Progress",
@@ -2685,7 +2810,6 @@ def all_grants():
                         "6. Results Indicators",
                     ])
                     with _sec_tabs[0]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                         
                         # Helper function to get field value from long format
                         def get_field_value(grant_info_list, field_name):
@@ -2841,11 +2965,7 @@ def all_grants():
                             )
                             cct_explanations[cct] = explanation
 
-<<<<<<< HEAD
-                        st.subheader("2. Strategic Objective & Progress", anchor=f"section-2-{grant_info_indx}")
-=======
                     with _sec_tabs[1]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
                         # Overall progress - adapted for long format
                         current_overall_progress = get_field_value(grant_info_list, "overall_progress")
@@ -2883,11 +3003,7 @@ def all_grants():
                             placeholder="List any World Bank intranet appearances (such as links to blog posts, feature stories, Up Front story, photos of internal events, data infographics, etc.). Send files at attachments to financefordevelopment@worldbank.org if there is no link."
                         )
 
-<<<<<<< HEAD
-                        st.subheader("3. Operations Informed and Country Engagements Informed by F4D", anchor=f"section-3-{grant_info_indx}")
-=======
                     with _sec_tabs[2]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                         # Create a unique session key for operations based on grant_info
                         operation_session_key = f"operation_{grant_info_indx}_{grant_info.fiscal_year_id}"
 
@@ -3257,11 +3373,7 @@ def all_grants():
                                 "evidence": ""
                             })
 
-<<<<<<< HEAD
-                        st.subheader("4. Collaboration/Partnership", anchor=f"section-4-{grant_info_indx}")
-=======
                     with _sec_tabs[3]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
                         # Get current collaborations from long format
                         current_collaborations_str = get_long_format_value(session, trustfund_id, fiscal_year_id, 'collaborations', '')
@@ -3320,11 +3432,7 @@ def all_grants():
                                     key=f"lessons_learned_{grant_info_indx}_{grant_info.fiscal_year_id}"
                                 )
 
-<<<<<<< HEAD
-                        st.subheader("5. Outputs/deliverables", anchor=f"section-5-{grant_info_indx}")
-=======
                     with _sec_tabs[4]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
                         # Initialize a list to hold missing mandatory fields
                         missing_mandatory_fields = []
@@ -3362,10 +3470,7 @@ def all_grants():
                                     existing_data = new_deliverables_data[str(mapping.indicator_id)]
                                     input_value = existing_data.get("input_value")
                                     progress = existing_data.get("progress")
-<<<<<<< HEAD
-=======
                                     deliverable_quantity = existing_data.get("deliverable_quantity", "")
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                     description = existing_data.get("description")
                                     data_source = existing_data.get("data_source")
                                     next_steps = existing_data.get("next_steps")
@@ -3373,10 +3478,7 @@ def all_grants():
                                 else:
                                     input_value = None
                                     progress = ""
-<<<<<<< HEAD
-=======
                                     deliverable_quantity = ""
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                     description = ""
                                     data_source = ""
                                     next_steps = ""
@@ -3421,15 +3523,9 @@ def all_grants():
 
                                     # Display the select box with dynamically loaded categories
                                     input_value = st.selectbox(
-<<<<<<< HEAD
-                                        f"{j} - {indicator.indicator_prompt} {mandatory_char}", 
-                                        categories, 
-                                        index=categories.index(input_value) if input_value in categories else None, 
-=======
                                         f"{j} - {indicator.indicator_prompt} {mandatory_char}",
                                         categories,
                                         index=categories.index(input_value) if input_value in categories else None,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                         key=f"categorical_input_{grant_info_indx}_{mapping.id}")
                                 else:
                                     st.write("No valid unit of measurement provided.")
@@ -3444,8 +3540,6 @@ def all_grants():
                                     key=f"progress_{grant_info_indx}_{mapping.id}"
                                 )
 
-<<<<<<< HEAD
-=======
                                 deliverable_quantity = st.text_input(
                                     f"{j} - Deliverable quantity",
                                     placeholder="Enter the number or quantity of this deliverable (e.g., number of MSMEs informed, number of reports produced).",
@@ -3453,7 +3547,6 @@ def all_grants():
                                     key=f"deliverable_quantity_{grant_info_indx}_{mapping.id}"
                                 )
 
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                 description = st.text_area(
                                     f"{j} - Brief description of the deliverable(s), including risk of delay",
                                     placeholder="Add detailed information to help the donors understand the details of the deliverable(s), including risk of delay",
@@ -3485,10 +3578,7 @@ def all_grants():
                                 new_deliverables_data[str(mapping.indicator_id)] = {
                                     "input_value": input_value,
                                     "progress": progress,
-<<<<<<< HEAD
-=======
                                     "deliverable_quantity": deliverable_quantity,
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                     "description": description,
                                     "data_source": data_source,
                                     "next_steps": next_steps,
@@ -3502,11 +3592,7 @@ def all_grants():
                                 # if progress is None or progress == "":
                                 #     missing_mandatory_fields.append("Number of deliverable(s)")
 
-<<<<<<< HEAD
-                        st.subheader("6. Results Indicators", anchor=f"section-6-{grant_info_indx}")
-=======
                     with _sec_tabs[5]:
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
                         # Initialize a dictionary to hold input values for all indicators
                         new_custom_indicators_data = {}
@@ -3682,19 +3768,11 @@ def all_grants():
                                 if mapping.relation_ship == "Mandatory" and (input_value is None or input_value == "" or (isinstance(input_value, (int, float)) and input_value < 0)):
                                     custom_missing_mandatory_fields.append(indicator.indicator_prompt)
 
-<<<<<<< HEAD
-                        # Create 2 columns for buttons
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-                            if st.button("Update", key=f"update_{grant_info_indx}_{grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}"):
-=======
                     # Update/Delete buttons appear below tabs, accessible from any section
                     col1, col2 = st.columns(2)
 
                     with col1:
                         if st.button("Update", key=f"update_{grant_info_indx}_{grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}"):
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                                 if missing_mandatory_fields == []:
                                     if custom_missing_mandatory_fields == []:
                                         # Update all fields in long format
@@ -3726,19 +3804,11 @@ def all_grants():
                                 else:
                                     st.warning("Please fill in all mandatory fields of standard indicators: " + ", ".join(missing_mandatory_fields))
 
-<<<<<<< HEAD
-                        with col2:
-                            if st.button("Delete", key=f"delete_modify_{grant_info_indx}_{grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}"):
-                                delete_long_format_field(session, trustfund_id, fiscal_year_id)
-                                st.success(f"Deleted Grant: {grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}")
-                                st.rerun()
-=======
                     with col2:
                         if st.button("Delete", key=f"delete_modify_{grant_info_indx}_{grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}"):
                             delete_long_format_field(session, trustfund_id, fiscal_year_id)
                             st.success(f"Deleted Grant: {grant_info.trustfund.name}_{grant_info.fiscal_year.fy if grant_info.fiscal_year else ''}")
                             st.rerun()
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
 
         else:
             st.write("No Grants found.")
@@ -3958,11 +4028,7 @@ def export_grants_deliverable(session, filename, team_id, trustfund_id=None):
         "challenges", "strategic_objective", "overall_progress", "implementation_challenges",
         "public_communication_external", "public_communication_internal",
         "collaborations", "other_teams", "other_ifis", "other_orgs", "describe_collaboration", "lessons_learned",
-<<<<<<< HEAD
-        "deliverable_name", "deliverable_input_value", "deliverable_progress", "deliverable_description", "deliverable_data_source", "deliverable_next_steps", "deliverable_supporting_materials_url"
-=======
         "deliverable_name", "deliverable_input_value", "deliverable_progress", "deliverable_quantity", "deliverable_description", "deliverable_data_source", "deliverable_next_steps", "deliverable_supporting_materials_url"
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
     ]
 
     # Fetch all records from the GrantInfo table in long format
@@ -4130,11 +4196,8 @@ def export_grants_deliverable(session, filename, team_id, trustfund_id=None):
                                 "input_value", "")
                             deliverable_row["deliverable_progress"] = deliverable_info.get(
                                 "progress", "")
-<<<<<<< HEAD
-=======
                             deliverable_row["deliverable_quantity"] = deliverable_info.get(
                                 "deliverable_quantity", "")
->>>>>>> e5c86a9 (Edit and Create merged and new text box added + extra On Hold option)
                             deliverable_row["deliverable_description"] = deliverable_info.get(
                                 "description", "")
                             deliverable_row["deliverable_data_source"] = deliverable_info.get(
