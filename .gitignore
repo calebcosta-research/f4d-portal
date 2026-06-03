@@ -4,6 +4,7 @@ venv/
 ...existing code...
 __pycache__/
 *.pyc
+*.log
 main_07052025.py
 superadmin_07052025.py
 app.py

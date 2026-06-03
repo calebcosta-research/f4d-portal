@@ -1,16 +1,30 @@
 import datetime
+import os
 from sqlalchemy import Column, Enum, Float, Integer, String, Table, Text, Boolean, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import Session
 from enum import Enum as PyEnum
+from dotenv import load_dotenv
+
+# Load .env before reading the schema setting (connection.py imports this
+# module before it calls load_dotenv itself).
+load_dotenv()
+
+# The production database (SQL Server) namespaces every table under the
+# TF_RESULTS_REPORTING schema. SQLite has no concept of schemas, so for local
+# development db_schema is left blank. Defaults preserve production behavior
+# when the variable is unset.
+DB_SCHEMA = os.getenv("db_schema", "TF_RESULTS_REPORTING") or None
+_TABLE_ARGS = {"schema": DB_SCHEMA} if DB_SCHEMA else {}
+_FK = f"{DB_SCHEMA}." if DB_SCHEMA else ""
 
 Base = declarative_base()
 
 
 class Indicator(Base):
     __tablename__ = 'indicators'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     indicator_id = Column(String, nullable=False)
@@ -26,7 +40,7 @@ class Indicator(Base):
     categorical_unit = Column(Text, nullable=True)
     indicator_conversion = Column(String, nullable=True)
     custom_indicator = Column(Boolean, default=True)
-    team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'), nullable=True)
+    team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"), nullable=True)
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
@@ -39,7 +53,7 @@ class Indicator(Base):
 
 class Team(Base):
     __tablename__ = 'teams'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     team = Column(String, nullable=False)
@@ -75,7 +89,7 @@ def delete_team(session: Session, team_id: int) -> bool:
 
 class FiscalYear(Base):
     __tablename__ = 'fys'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fy = Column(String, nullable=False)
@@ -89,12 +103,12 @@ class FiscalYear(Base):
 
 class User(Base):
     __tablename__ = 'users'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), unique=True, nullable=False)
     password = Column(String(255), nullable=False)
-    team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'),
+    team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"),
                      nullable=True)
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False)
@@ -108,7 +122,7 @@ class User(Base):
 
 class Country(Base):
     __tablename__ = 'countries'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     country = Column(String, nullable=False)
@@ -122,7 +136,7 @@ class Country(Base):
 
 class Region(Base):
     __tablename__ = 'regions'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     region = Column(String, nullable=False)
@@ -136,7 +150,7 @@ class Region(Base):
 
 class TrustFund(Base):
     __tablename__ = 'trustfunds'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_type = Column(Enum('Trust Fund', 'Pillar', 'Tier',
@@ -146,7 +160,7 @@ class TrustFund(Base):
     pcode = Column(String, nullable=True)
     grant = Column(String, nullable=True)
     ttl = Column(String, nullable=True)
-    team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'), nullable=True)
+    team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"), nullable=True)
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
@@ -159,14 +173,14 @@ class TrustFund(Base):
 
 class TrustFundIndicatorMapping(Base):
     __tablename__ = 'trustfund_indicator_mapping'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    trustfund_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.trustfunds.id'), nullable=False)
-    indicator_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.indicators.id'), nullable=False)
+    trustfund_id = Column(Integer, ForeignKey(f"{_FK}trustfunds.id"), nullable=False)
+    indicator_id = Column(Integer, ForeignKey(f"{_FK}indicators.id"), nullable=False)
     relation_ship = Column(Enum('Mandatory', 'Optional',
                                 name='relationship_enum'), nullable=False)
-    team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'), nullable=True)
+    team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"), nullable=True)
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
@@ -187,12 +201,12 @@ class F4DAssociationEnum(PyEnum):
 
 # class GrantInfo(Base):
 #     __tablename__ = 'grant_info'
-#     __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+#     __table_args__ = _TABLE_ARGS
 
 #     id = Column(Integer, primary_key=True)
 #     # 1.	Basic Grant Information
-#     trustfund_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.trustfunds.id'), nullable=False)
-#     fiscal_year_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.fys.id'), nullable=True)
+#     trustfund_id = Column(Integer, ForeignKey(f"{_FK}trustfunds.id"), nullable=False)
+#     fiscal_year_id = Column(Integer, ForeignKey(f"{_FK}fys.id"), nullable=True)
 #     country = Column(Text)
 #     p_code_instrument = Column(Text)
 #     p_code_description = Column(String)
@@ -237,7 +251,7 @@ class F4DAssociationEnum(PyEnum):
 #     # 6. Custom Indicators
 #     custom_indicators = Column(Text)
 
-#     team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'), nullable=True)
+#     team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"), nullable=True)
 #     deleted = Column(Boolean, default=False)
 #     created_at = Column(DateTime, nullable=False)
 #     updated_at = Column(DateTime, nullable=False)
@@ -245,11 +259,11 @@ class F4DAssociationEnum(PyEnum):
 
 class GrantInfo(Base):
     __tablename__ = 'grant_info_long'
-    __table_args__ = {'schema': 'TF_RESULTS_REPORTING'}
+    __table_args__ = _TABLE_ARGS
 
     id = Column(Integer, primary_key=True)
-    trustfund_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.trustfunds.id'), nullable=False)
-    fiscal_year_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.fys.id'), nullable=True)
+    trustfund_id = Column(Integer, ForeignKey(f"{_FK}trustfunds.id"), nullable=False)
+    fiscal_year_id = Column(Integer, ForeignKey(f"{_FK}fys.id"), nullable=True)
     field = Column(String, nullable=False)
     value = Column(Text, nullable=True)
 
@@ -257,7 +271,7 @@ class GrantInfo(Base):
     fiscal_year = relationship("FiscalYear", backref="grant_info_long")
     team = relationship("Team", backref="grant_info_long")
 
-    team_id = Column(Integer, ForeignKey('TF_RESULTS_REPORTING.teams.id'), nullable=True)
+    team_id = Column(Integer, ForeignKey(f"{_FK}teams.id"), nullable=True)
     deleted = Column(Boolean, default=False)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False)
