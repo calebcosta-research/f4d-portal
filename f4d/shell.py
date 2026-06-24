@@ -16,10 +16,17 @@ from f4d.sections.lending_operations import lending_operations
 from f4d.sections.collaboration import collaboration_partnership
 from f4d.sections.deliverables import deliverables
 from f4d.sections.custom_indicators import custom_indicators
-from f4d.exports import download_grants
+from f4d.sections.review_submit import review_submit
 
 
 def main():
+    # Hide Streamlit's "Press Ctrl+Enter to apply" hint, which overlapped
+    # typed text in text areas/inputs (reported on Strategic Objectives).
+    st.markdown(
+        '<style>[data-testid="InputInstructions"]{display:none;}</style>',
+        unsafe_allow_html=True,
+    )
+
     # Initialize session state for user login and user_id status
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
@@ -69,7 +76,6 @@ def display_main_app():
     pages = {
           "Home": [home, None],
           "Report new results": [new_grant, None],
-          "Download results ": [download_grants, None],
     }
     
     # Map subpages for specific main pages
@@ -79,8 +85,9 @@ def display_main_app():
             "Strategic Objective & Progress", 
             "Lending Operations", 
             "Collaboration/Partnership", 
-            "Outputs/deliverables", 
-            "Results Indicators"
+            "Outputs/deliverables",
+            "Results Indicators",
+            "Review & Submit"
         ]
     }
     
@@ -352,10 +359,10 @@ def display_main_app():
             deliverables()
         elif current_sub == "Results Indicators":
             custom_indicators()
+        elif current_sub == "Review & Submit":
+            review_submit()
         else:
             basic_grant_info()
-    elif current_main == "Download results ":
-        download_grants()
     else:
         st.error(f"Page '{current_main}' not found")
 

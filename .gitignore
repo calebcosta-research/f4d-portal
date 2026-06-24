@@ -18,3 +18,6 @@ main_wide.py
 f4d.db
 *.db
 *.sqlite3
+exports/
+*.zip
+applog.txt

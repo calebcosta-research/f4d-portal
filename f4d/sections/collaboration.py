@@ -1,4 +1,5 @@
 # Auto-split from the original monolithic main.py. See git history.
+import ast
 import datetime
 import streamlit as st
 from connection import create_session
@@ -9,6 +10,22 @@ from f4d.context import (
     current_team_id,
 )
 
+# Per-collaboration type dropdown options.
+COLLAB_OPTIONS = [
+    "Other World Bank teams (e.g. GPs)",
+    "IFC",
+    "IMF",
+    "Other IFIs/MDBs/bilateral organizations",
+    "Other organizations (e.g. CSOs, private sector, academia, think tanks)",
+]
+
+_ENTRY_FIELDS = ("type", "partner_detail", "describe", "lessons_learned")
+_YES_NO = ["Yes", "No"]
+
+
+def _empty_entry():
+    return {k: "" for k in _ENTRY_FIELDS}
+
 
 def collaboration_partnership():
     st.success("### 4. Collaboration/Partnership")
@@ -17,207 +34,145 @@ def collaboration_partnership():
         st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
         return
 
-    # Clear widget keys whenever the fiscal year changes so fields reload from DB
-    _COLLAB_KEYS = [
-        "collaborations_input", "other_teams_input", "other_ifis_input",
-        "other_orgs_input", "describe_collaboration_input", "lessons_learned_input",
-    ]
-    if st.session_state.get("collab_loaded_for_fy") != st.session_state.current_fiscal_year_id:
-        for _k in _COLLAB_KEYS:
-            st.session_state.pop(_k, None)
-        st.session_state.pop("collaboration_initial_values", None)
-        st.session_state["collab_loaded_for_fy"] = st.session_state.current_fiscal_year_id
-
-    # Create a new session
     session = create_session()
+    tf_id = st.session_state.current_trustfund_id
+    fy_id = st.session_state.current_fiscal_year_id
 
-    # Fetch the existing GrantInfo instance based on the current trustfund_id
     existing_grant_info = session.query(GrantInfo).filter_by(
-        trustfund_id=st.session_state.current_trustfund_id, fiscal_year_id=st.session_state.current_fiscal_year_id).first()
+        trustfund_id=tf_id, fiscal_year_id=fy_id).first()
 
-    # Initialize variables for the form fields
-    collaborations = []
-    other_teams = ""
-    other_ifis = ""
-    other_orgs = ""
-    describe_collaboration = ""
-    lessons_learned = ""
+    # Reload widgets/entries from the DB whenever the fiscal year changes.
+    if st.session_state.get("collab_loaded_for_fy") != fy_id:
+        st.session_state.pop("collaborations_input", None)
+        st.session_state.pop("collaboration_list", None)
+        st.session_state["collab_loaded_for_fy"] = fy_id
 
-    # If there is existing data, populate the variables with that data
-    if existing_grant_info:
-        long_format_entries = session.query(GrantInfo).filter_by(
-            trustfund_id=st.session_state.current_trustfund_id,
-            fiscal_year_id=st.session_state.current_fiscal_year_id,
-            deleted=False
-        ).all()
+    # ---- Top-level Yes/No question -------------------------------------------
+    q_row = session.query(GrantInfo).filter_by(
+        trustfund_id=tf_id, fiscal_year_id=fy_id, field="collaborations", deleted=False).first()
+    saved_answer = (q_row.value or "").strip() if q_row else ""
 
-        for entry in long_format_entries:
-            if entry.field == "collaborations":
-                collaborations = eval(entry.value)  
-            elif entry.field == "other_teams":
-                other_teams = entry.value
-            elif entry.field == "other_ifis":
-                other_ifis = entry.value
-            elif entry.field == "other_orgs":
-                other_orgs = entry.value
-            elif entry.field == "describe_collaboration":
-                describe_collaboration = entry.value
-            elif entry.field == "lessons_learned":
-                lessons_learned = entry.value
+    answer = st.radio(
+        "Is the grant delivered in collaboration/partnership with other World Bank "
+        "teams (e.g. other GPs), IFC, IMF, or other MDBs/IFIs/bilateral organizations? *",
+        _YES_NO,
+        index=_YES_NO.index(saved_answer) if saved_answer in _YES_NO else None,
+        key="collaborations_input",
+    )
 
-    # Store initial values in session state for change detection
-    if "collaboration_initial_values" not in st.session_state:
-        st.session_state.collaboration_initial_values = {
-            "collaborations": collaborations if collaborations else [],
-            "other_teams": other_teams if other_teams else "",
-            "other_ifis": other_ifis if other_ifis else "",
-            "other_orgs": other_orgs if other_orgs else "",
-            "describe_collaboration": describe_collaboration if describe_collaboration else "",
-            "lessons_learned": lessons_learned if lessons_learned else ""
-        }
-        st.session_state.collaboration_unsaved_changes = False
-    else:
-        # If initial values already exist, use them
-        st.session_state.collaboration_initial_values = {
-            "collaborations": collaborations if collaborations else [],
-            "other_teams": other_teams if other_teams else "",
-            "other_ifis": other_ifis if other_ifis else "",
-            "other_orgs": other_orgs if other_orgs else "",
-            "describe_collaboration": describe_collaboration if describe_collaboration else "",
-            "lessons_learned": lessons_learned if lessons_learned else ""
-        }
-
-    default_collaborations = collaborations if collaborations else []
-
-    # Multi-select for collaboration options with default values
-    new_collaborations = st.multiselect(
-        "Is the grant delivered in collaboration/partnership with other World Bank teams (e.g. other GPs), IFC, IMF, or other MDBs/IFIs/bilateral organizations? *", [
-            "Other World Bank teams (e.g. GPs)",
-            "IFC",
-            "IMF",
-            "Other IFIs/MDBs/bilateral organizations",
-            "Other organizations (e.g. CSOs, private sector, academia, think tanks)",
-            "No"
-        ], default=default_collaborations, key="collaborations_input")
-
-    # If "Yes" options are selected, ask for additional details
-    new_other_teams = ""
-    new_other_ifis = ""
-    new_other_orgs = ""
-    new_describe_collaboration = ""
-    new_lessons_learned = ""
-    
-    if new_collaborations:
-        if "Other World Bank teams (e.g. GPs)" in new_collaborations:
-            new_other_teams = st.text_input(
-                "Which teams?", value=other_teams, key="other_teams_input")
-
-        if "Other IFIs/MDBs/bilateral organizations" in new_collaborations:
-            new_other_ifis = st.text_input(
-                "Which organizations?", value=other_ifis, key="other_ifis_input")
-
-        if "Other organizations (e.g. CSOs, private sector, academia, think tanks)" in new_collaborations:
-            new_other_orgs = st.text_input(
-                "Which other organizations?", value=other_orgs, key="other_orgs_input")
-        
-        if "No" not in new_collaborations:
-            new_describe_collaboration = st.text_area(
-                "Describe the collaboration",
-                placeholder="In which areas of the grant is the collaboration taking place/took place? What strengths or value-added by the partners were leveraged in the collaboration/partnership? What role did the World Bank play in the collaboration/partnership?",
-                value=describe_collaboration,
-                key="describe_collaboration_input"
-            )
-
-            new_lessons_learned = st.text_area(
-                "Lessons learned",
-                placeholder="Please describe any lessons learned from the collaboration. How is the partnership expected to evolve?",
-                value=lessons_learned,
-                key="lessons_learned_input"
-            )
-
-    # Check for changes in form values
-    current_values = {
-        "collaborations": new_collaborations or [],
-        "other_teams": new_other_teams or "",
-        "other_ifis": new_other_ifis or "",
-        "other_orgs": new_other_orgs or "",
-        "describe_collaboration": new_describe_collaboration or "",
-        "lessons_learned": new_lessons_learned or ""
-    }
-    
-    # Detect changes by comparing current values with initial values
-    changes_detected = False
-
-    for key, value in current_values.items():
-        if key == "collaborations":
-            # Special handling for list comparison
-            initial_list = st.session_state.collaboration_initial_values.get(key, [])
-            if sorted(value) != sorted(initial_list):
-                changes_detected = True
-                break
-        elif value != st.session_state.collaboration_initial_values.get(key, ""):
-            changes_detected = True
-            break
-        
-    # Update unsaved changes flag
-    st.session_state.collaboration_unsaved_changes = changes_detected
-
-    # Define mandatory fields and their corresponding names
-    mandatory_fields = [
-        (new_collaborations, 'Is the grant delivered in collaboration/partnership with other World Bank teams (e.g. other GPs), IFC, IMF, or other MDBs/IFIs/bilateral organizations?')
-    ]
-
-    # Check for unfilled mandatory fields
-    missing_fields = [name for value, name in mandatory_fields if not value]
-
-    # Save button to handle saving the data
-    if st.button("Save", type="primary"):
-        if existing_grant_info:
-            if not missing_fields:
-                # Update existing record with new values
-                # Clear existing entries for the current trustfund and fiscal year, matching fields
-                for field in ["collaborations", "other_teams", "other_ifis", "other_orgs", "describe_collaboration", "lessons_learned"]:
-                    session.query(GrantInfo).filter_by(
-                        trustfund_id=st.session_state.current_trustfund_id,
-                        fiscal_year_id=st.session_state.current_fiscal_year_id,
-                        field=field
-                    ).delete()
-
-                # Save new values in long format
-                for key, value in current_values.items():
-                    if isinstance(value, list):
-                        value = str(value)
-                    new_entry = GrantInfo(
-                        trustfund_id=st.session_state.current_trustfund_id,
-                        fiscal_year_id=st.session_state.current_fiscal_year_id,
-                        field=key,
-                        value=value,
-                        team_id=current_team_id(),
-                        deleted=False,
-                        created_at=datetime.datetime.now(),
-                        updated_at=datetime.datetime.now()
-                    )
-                    session.add(new_entry)
-
-                # Commit the changes to the database
-                session.commit()
-                
-                # Reset the initial values to the current values after saving
-                st.session_state.collaboration_initial_values = dict(current_values)
-                st.session_state.collaboration_unsaved_changes = False
-                
-                st.success("Collaboration information saved successfully!")
-            else:
-                st.error(
-                    f"Please fill in all mandatory fields: {', '.join(missing_fields)}")
+    if st.button("Save response", key="save_collab_question", type="primary"):
+        if not existing_grant_info:
+            st.warning("No Grant Info exists! Please create one in Basic Grant Information subpage")
+        elif answer not in _YES_NO:
+            st.error("Please answer the collaboration/partnership question before saving.")
         else:
-            st.warning(
-                "No Grant Info exists! Please create one in Basic Grant Information subpage")
+            session.query(GrantInfo).filter_by(
+                trustfund_id=tf_id, fiscal_year_id=fy_id, field="collaborations").delete()
+            session.add(GrantInfo(
+                trustfund_id=tf_id, fiscal_year_id=fy_id, field="collaborations",
+                value=answer, team_id=current_team_id(), deleted=False,
+                created_at=datetime.datetime.now(), updated_at=datetime.datetime.now()))
+            session.commit()
+            st.session_state.collaboration_unsaved_changes = False
+            st.success("Collaboration response saved!")
 
-    # Display notification if there are unsaved changes
-    if st.session_state.collaboration_unsaved_changes:
+    # ---- Collaboration details: only shown (and required) when answer is Yes -
+    if answer != "Yes":
+        if answer == "No":
+            st.info("No collaboration/partnership reported for this grant.")
+        session.close()
+        return
+
+    st.divider()
+    st.markdown("#### Collaboration details *")
+    st.caption("Because you answered **Yes**, add at least one collaboration/partnership "
+               "below — each with its own type and details.")
+
+    if "collaboration_list" not in st.session_state:
+        entries = []
+        for r in session.query(GrantInfo).filter_by(
+                trustfund_id=tf_id, fiscal_year_id=fy_id, deleted=False).all():
+            if r.field.startswith("collaboration_"):  # collaboration_1, _2, ... (not "collaborations")
+                try:
+                    entries.append(ast.literal_eval(r.value))
+                except (ValueError, SyntaxError):
+                    pass
+        st.session_state["collaboration_list"] = entries
+        st.session_state.setdefault("collaboration_unsaved_changes", False)
+
+    def mark_changed():
+        st.session_state.collaboration_unsaved_changes = True
+
+    collab_to_delete = None
+    for i in range(len(st.session_state["collaboration_list"])):
+        entry = st.session_state["collaboration_list"][i]
+        st.subheader(f"Collaboration {i + 1}")
+
+        _type = entry.get("type", "")
+        entry["type"] = st.selectbox(
+            "Type of collaboration/partner",
+            COLLAB_OPTIONS,
+            index=COLLAB_OPTIONS.index(_type) if _type in COLLAB_OPTIONS else None,
+            key=f"collab_type_{i}", on_change=mark_changed)
+
+        entry["partner_detail"] = st.text_input(
+            "Which team(s) / organization(s)?",
+            value=entry.get("partner_detail", ""),
+            key=f"collab_partner_{i}", on_change=mark_changed)
+
+        entry["describe"] = st.text_area(
+            "Describe the collaboration",
+            placeholder="In which areas of the grant is the collaboration taking place? "
+                        "What value did the partners add? What role did the World Bank play?",
+            value=entry.get("describe", ""),
+            key=f"collab_describe_{i}", on_change=mark_changed)
+
+        entry["lessons_learned"] = st.text_area(
+            "Lessons learned",
+            placeholder="Any lessons learned from the collaboration. "
+                        "How is the partnership expected to evolve?",
+            value=entry.get("lessons_learned", ""),
+            key=f"collab_lessons_{i}", on_change=mark_changed)
+
+        c1, c2 = st.columns([2, 2])
+        with c1:
+            if st.button(f"Save Collaboration {i + 1}", key=f"save_collab_{i}"):
+                session.query(GrantInfo).filter_by(
+                    trustfund_id=tf_id, fiscal_year_id=fy_id,
+                    field=f"collaboration_{i + 1}").delete()
+                session.add(GrantInfo(
+                    trustfund_id=tf_id, fiscal_year_id=fy_id, field=f"collaboration_{i + 1}",
+                    value=str({k: entry.get(k, "") for k in _ENTRY_FIELDS}),
+                    team_id=current_team_id(), deleted=False,
+                    created_at=datetime.datetime.now(), updated_at=datetime.datetime.now()))
+                session.commit()
+                st.session_state.collaboration_unsaved_changes = False
+                st.success(f"Collaboration {i + 1} saved successfully!")
+        with c2:
+            if st.button(f"Delete Collaboration {i + 1}", key=f"delete_collab_{i}"):
+                collab_to_delete = i
+                st.session_state.collaboration_unsaved_changes = True
+
+    if not st.session_state["collaboration_list"]:
+        st.warning("At least one collaboration is required because you answered **Yes**.")
+
+    if st.button("Add Collaboration", key="add_collaboration", type="primary"):
+        st.session_state["collaboration_list"].append(_empty_entry())
+        st.session_state.collaboration_unsaved_changes = True
+        st.rerun()
+
+    # Handle deletion outside the loop to avoid index-shift issues.
+    if collab_to_delete is not None:
+        st.session_state["collaboration_list"].pop(collab_to_delete)
+        session.query(GrantInfo).filter_by(
+            trustfund_id=tf_id, fiscal_year_id=fy_id,
+            field=f"collaboration_{collab_to_delete + 1}").delete()
+        session.commit()
+        st.session_state.collaboration_unsaved_changes = False
+        st.success(f"Collaboration {collab_to_delete + 1} deleted successfully!")
+        st.rerun()
+
+    if st.session_state.get("collaboration_unsaved_changes", False):
         st.warning("⚠️ You have unsaved changes. Don't forget to save your work!")
 
-    # Close the session
     session.close()
-

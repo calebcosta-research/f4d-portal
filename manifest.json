@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "locale": "English_United States.1252",
+  "metadata": {
+    "appmode": "python-streamlit",
+    "entrypoint": "main.py"
+  },
+  "python": {
+    "version": "3.11.9",
+    "package_manager": {
+      "name": "pip",
+      "version": "26.1.2",
+      "package_file": "requirements.txt"
+    }
+  },
+  "files": {
+    "requirements.txt": {
+      "checksum": "87505e2776307004c7a96ec102b719a3"
+    },
+    ".env.example": {
+      "checksum": "4300e0544860ab57305cb8741707f58e"
+    },
+    ".gitignore": {
+      "checksum": "0ae1ef1c1dd205fd38f11f509f8ab520"
+    },
+    ".streamlit/config.toml": {
+      "checksum": "097c07ee5c9eb0fd40dd4fb9734a6bfa"
+    },
+    "batch_import.py": {
+      "checksum": "6d372af2c894e6179745b87a6acaee27"
+    },
+    "connection.py": {
+      "checksum": "789e6a1fc4b651ab0b092a5189dfe36e"
+    },
+    "docs/BACKUP_HOSTING_PLAN.md": {
+      "checksum": "30b79adbd96069bbe8b152522f567bd9"
+    },
+    "docs/ITS_hosting_request_DRAFT.md": {
+      "checksum": "92bcf0b5098b7cc1411aa4f0da8d06ea"
+    },
+    "docs/azure_provisioning_request.md": {
+      "checksum": "6b626a06e77f6533ddb32e517f26f108"
+    },
+    "f4d/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "f4d/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "b1c135d276eaf0a40ad38d8745b23d2d"
+    },
+    "f4d/__pycache__/auth.cpython-311.pyc": {
+      "checksum": "52664901daa6f7c9c0e8d6fde8959681"
+    },
+    "f4d/__pycache__/config.cpython-311.pyc": {
+      "checksum": "d860e33792dc15b9e2c915e281135216"
+    },
+    "f4d/__pycache__/context.cpython-311.pyc": {
+      "checksum": "692ed6624fd354f33769928bf296d534"
+    },
+    "f4d/__pycache__/data_access.cpython-311.pyc": {
+      "checksum": "71a961fe93efeb069a609d37dbedb535"
+    },
+    "f4d/__pycache__/edit_results.cpython-311.pyc": {
+      "checksum": "ec8f4cb00a1e72466f5fd36193540b71"
+    },
+    "f4d/__pycache__/exports.cpython-311.pyc": {
+      "checksum": "dd78e5abcdc000251c9d28172216a8a7"
+    },
+    "f4d/__pycache__/master_export.cpython-311.pyc": {
+      "checksum": "3c4b9e699fc3d2ea0414cd2bdc42cc49"
+    },
+    "f4d/__pycache__/reporting_export.cpython-311.pyc": {
+      "checksum": "1317796b512e7cce6bacecdc3c4945b1"
+    },
+    "f4d/__pycache__/shell.cpython-311.pyc": {
+      "checksum": "7e5fa5e23e845b5e92ca8f6face43289"
+    },
+    "f4d/__pycache__/validation.cpython-311.pyc": {
+      "checksum": "7f3a44609e90905f377a0b5d391e62d8"
+    },
+    "f4d/auth.py": {
+      "checksum": "0696d8a77e7a7b6c0f945fb5ec15fd76"
+    },
+    "f4d/batch/__init__.py": {
+      "checksum": "456598cf60679b674b22cb652253d014"
+    },
+    "f4d/batch/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "8deffdac5b1e2b35c72fae26baae6663"
+    },
+    "f4d/batch/__pycache__/core.cpython-311.pyc": {
+      "checksum": "15a4162f71897c41739595fbee7bac98"
+    },
+    "f4d/batch/core.py": {
+      "checksum": "94bd1f9f84248979c0c28e3651874383"
+    },
+    "f4d/config.py": {
+      "checksum": "e2ad6025f1230872a8c40e787606b196"
+    },
+    "f4d/context.py": {
+      "checksum": "321e533df9d850f365bcbe6b7249eb96"
+    },
+    "f4d/data_access.py": {
+      "checksum": "e60deab0621fed7092ce12ceac3bfd94"
+    },
+    "f4d/edit_results.py": {
+      "checksum": "6ae8fcb9c77deaa9ed4dfb66676df262"
+    },
+    "f4d/exports.py": {
+      "checksum": "b5224b9a926bca2837ccaf4aae155327"
+    },
+    "f4d/master_export.py": {
+      "checksum": "57f9d4774aad4e8dfbd16e6b0e2179e5"
+    },
+    "f4d/reporting_export.py": {
+      "checksum": "76d0431bd1976b02fadf12554619bdec"
+    },
+    "f4d/sections/__init__.py": {
+      "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "f4d/sections/__pycache__/__init__.cpython-311.pyc": {
+      "checksum": "d0a788006953e3701b59119bcdfe8cdb"
+    },
+    "f4d/sections/__pycache__/basic_grant_info.cpython-311.pyc": {
+      "checksum": "4adf81cdb771d88929eeabc3388851fb"
+    },
+    "f4d/sections/__pycache__/collaboration.cpython-311.pyc": {
+      "checksum": "e678628e5e781190bae8f4095cfdfdb5"
+    },
+    "f4d/sections/__pycache__/custom_indicators.cpython-311.pyc": {
+      "checksum": "21ca8f4517b7c3a988ce956d45a52611"
+    },
+    "f4d/sections/__pycache__/deliverables.cpython-311.pyc": {
+      "checksum": "55f88882b35eb9f5545d6bed764401fd"
+    },
+    "f4d/sections/__pycache__/home.cpython-311.pyc": {
+      "checksum": "45964e3fe471e6b751819a2c8209e61f"
+    },
+    "f4d/sections/__pycache__/lending_operations.cpython-311.pyc": {
+      "checksum": "eb8817a6ded679d1c53f8f54564ceeb4"
+    },
+    "f4d/sections/__pycache__/review_submit.cpython-311.pyc": {
+      "checksum": "36d316c28e3ad592f29a49453a129f68"
+    },
+    "f4d/sections/__pycache__/strategic_objective.cpython-311.pyc": {
+      "checksum": "bdd54e17e354f578990a2057242db255"
+    },
+    "f4d/sections/basic_grant_info.py": {
+      "checksum": "c5648533c213979bf229dac0e3bbffcb"
+    },
+    "f4d/sections/collaboration.py": {
+      "checksum": "5710022d20f37a1b2ddb636c9cf08fa9"
+    },
+    "f4d/sections/custom_indicators.py": {
+      "checksum": "90f275d26d473a5eff90e5fb49b0d5fd"
+    },
+    "f4d/sections/deliverables.py": {
+      "checksum": "8999833eb387cd1b4c49aa96be8c1608"
+    },
+    "f4d/sections/home.py": {
+      "checksum": "8ffe2a781eb024d47701a3df39fca7a8"
+    },
+    "f4d/sections/lending_operations.py": {
+      "checksum": "01305ec0182af8014778896649b3b5fc"
+    },
+    "f4d/sections/review_submit.py": {
+      "checksum": "b7f347686c7f91927eb443a697b21297"
+    },
+    "f4d/sections/strategic_objective.py": {
+      "checksum": "7b90f6a18b53e9bcd4f4612ced26335a"
+    },
+    "f4d/shell.py": {
+      "checksum": "8f40b0a7e333ac02a3bdc8baf1e468d8"
+    },
+    "f4d/validation.py": {
+      "checksum": "7d5340bdffdcdc12db79dccc6c27fd11"
+    },
+    "main.py": {
+      "checksum": "d8f2949e526d07cd1f848acc978ff2ff"
+    },
+    "model.py": {
+      "checksum": "ca33040ded864842451eb4451346c560"
+    },
+    "seed_all_from_master.py": {
+      "checksum": "dcd9b3997fe5a599d95ab0db0dc673d8"
+    },
+    "seed_demo_fund.py": {
+      "checksum": "fdd47b9710eb119bab4bf9d8ab8ff705"
+    },
+    "seed_dev.py": {
+      "checksum": "695ea32455a407cb6852d70d1ab2ec34"
+    },
+    "seed_haiti_example.py": {
+      "checksum": "b9a1c0f981147df8d236ffe9b2a64ff8"
+    },
+    "seed_test_data.py": {
+      "checksum": "5d762cda74e0413015bab24f2748f03f"
+    },
+    "superadmin.py": {
+      "checksum": "365d42d93c5d91e1bd424b0f1c8d231e"
+    }
+  }
+}

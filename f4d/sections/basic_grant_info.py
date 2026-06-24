@@ -345,6 +345,11 @@ def basic_grant_info():
                             value = value.value
                         if isinstance(value, dict):
                             value = str(value)
+                        # grant_info_long.value is TEXT; stringify any remaining
+                        # non-string (e.g. region_id int) so Postgres doesn't
+                        # infer an integer column type for a mixed batch insert.
+                        if value is not None and not isinstance(value, str):
+                            value = str(value)
 
                         session.query(GrantInfo).filter_by(
                             trustfund_id=existing_grant_info.trustfund_id,
@@ -366,6 +371,11 @@ def basic_grant_info():
                         if field == 'f4d_association' and isinstance(value, F4DAssociationEnum):
                             value = value.value
                         if isinstance(value, dict):
+                            value = str(value)
+                        # grant_info_long.value is TEXT; stringify any remaining
+                        # non-string (e.g. region_id int) so Postgres doesn't
+                        # infer an integer column type for a mixed batch insert.
+                        if value is not None and not isinstance(value, str):
                             value = str(value)
 
                         new_grant_info_entry = GrantInfo(

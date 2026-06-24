@@ -48,7 +48,7 @@ def main():
         )
 
         fy_objs = []
-        for fy_label in ("FY24", "FY25"):
+        for fy_label in ("FY24", "FY25", "FY26"):
             fy, _ = get_or_create(
                 session, FiscalYear, fy=fy_label,
                 defaults={"created_at": NOW, "updated_at": NOW},
@@ -68,10 +68,15 @@ def main():
         indicator, _ = get_or_create(
             session, Indicator, indicator_id="IND-001", team_id=team.id,
             defaults={"indicator_name": "Number of beneficiaries reached",
+                      "indicator_prompt": "Number of beneficiaries reached",
                       "unit_of_measurement": "Number",
                       "custom_indicator": False,
                       "created_at": NOW, "updated_at": NOW},
         )
+        # Backfill on pre-existing rows: the deliverables page calls
+        # .endswith() on indicator_prompt, so it must never be None.
+        if not indicator.indicator_prompt:
+            indicator.indicator_prompt = indicator.indicator_name
 
         get_or_create(
             session, TrustFundIndicatorMapping,

@@ -1,6 +1,7 @@
 # Auto-split from the original monolithic main.py. See git history.
 import ast
 import datetime
+import uuid
 import pandas as pd
 import streamlit as st
 from connection import create_session
@@ -10,6 +11,8 @@ from model import (
 from f4d.context import (
     current_team_id, current_username,
 )
+from f4d.data_access import set_blob_entry_archived
+from f4d.reporting_export import export_report_safe
 
 
 def show_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_id):
@@ -196,12 +199,22 @@ def custom_indicators():
     # Initialize a list to hold missing mandatory fields
     missing_mandatory_fields = []
 
+    # Archived admin-mapped indicators — collected here and shown (with a
+    # Restore option) in the archived section below instead of as form rows.
+    archived_mapped = []
+
     # Iterate through each mapping and display appropriate input fields
     for mapping in mappings:
         indicator = session.query(Indicator).filter(
             Indicator.id == mapping.indicator_id, Indicator.custom_indicator == True).first()
 
         if indicator:
+            # Skip archived indicators — they move to the archived section and
+            # are excluded from the form and from mandatory-field validation.
+            if custom_indicators_data.get(str(mapping.indicator_id), {}).get("archived"):
+                archived_mapped.append((str(mapping.indicator_id), indicator.indicator_name))
+                continue
+
             mandatory_char = ""
             if mapping.relation_ship == "Mandatory":
                 mandatory_char = "*"
@@ -291,16 +304,16 @@ def custom_indicators():
                 # Display input fields based on unit_of_measurement
                 if indicator.unit_of_measurement == 'Date':
                     input_value = st.date_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
+                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Number' or indicator.unit_of_measurement == 'Percentage':
                     input_value = st.number_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"number_input_{mapping.id}")
+                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"number_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Short Text':
                     input_value = st.text_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
+                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
                 elif indicator.unit_of_measurement == 'Long Text':
                     input_value = st.text_area(
-                        f"{indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"long_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
+                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"long_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
                 # elif indicator.unit_of_measurement == 'Percentage':
                 #     input_value = st.number_input(
                 #         f"{mandatory_char}{indicator.indicator_prompt}", value=input_value,  key=f"percentage_input_{mapping.id}")
@@ -314,11 +327,17 @@ def custom_indicators():
 
                     # Display the select box with dynamically loaded categories
                     input_value = st.selectbox(
-                        f"{'Progress value: '} {indicator.indicator_prompt} {mandatory_char}", categories, index=categories.index(input_value) if input_value in categories else None, key=f"categorical_input_{mapping.id}"
+                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", categories, index=categories.index(input_value) if input_value in categories else None, key=f"categorical_input_{mapping.id}"
                     )
                 else:
                     st.write("No valid unit of measurement provided.")
                     continue
+
+                progress = st.text_area(
+                    "Explain the Progress",
+                    value=progress,
+                    key=f"progress_{mapping.id}"
+                )
 
                 baseline_value = st.text_input(
                     "Baseline value", value=baseline_value,
@@ -328,12 +347,6 @@ def custom_indicators():
                 year_baseline = st.number_input(
                     "Year baseline data was collected", value=year_baseline, min_value=1900, max_value=2100,
                     key=f"year_baseline_{mapping.id}"
-                )
-
-                progress = st.text_area(
-                    "Explain the Progress",
-                    value=progress,
-                    key=f"progress_{mapping.id}"
                 )
 
                 target_value = st.text_input(
@@ -354,6 +367,30 @@ def custom_indicators():
                     placeholder="Where do you obtain the data from? Data source must be publicly available. e.g., Progress Report (PR); Activity Completion Summary (ACS); Implementation Status and Results Report (ISR); Implementation Completion and Results Report (ICR); Client website, etc.",
                     key=f"data_collection_{mapping.id}"
                 )
+
+                # Drop this indicator (soft-delete/archive, persisted immediately).
+                _m_confirm = f"ci_confirm_archive_map_{mapping.indicator_id}"
+                if st.session_state.get(_m_confirm):
+                    st.warning("Drop this indicator? It will be hidden but not "
+                               "permanently deleted. Unsaved edits above won't be kept.")
+                    _reason_key = f"ci_drop_reason_map_{mapping.indicator_id}"
+                    drop_reason = st.text_input(
+                        "Reason for dropping (optional)", key=_reason_key)
+                    a1, a2 = st.columns(2)
+                    if a1.button("Confirm drop", key=f"ci_do_archive_map_{mapping.indicator_id}", type="primary"):
+                        set_blob_entry_archived(
+                            session, trustfund_id, st.session_state.current_fiscal_year_id,
+                            "custom_indicators", str(mapping.indicator_id), True, reason=drop_reason)
+                        st.session_state.pop(_m_confirm, None)
+                        st.session_state.pop(_reason_key, None)
+                        st.rerun()
+                    if a2.button("Cancel", key=f"ci_cancel_archive_map_{mapping.indicator_id}"):
+                        st.session_state.pop(_m_confirm, None)
+                        st.rerun()
+                else:
+                    if st.button("Drop this Results Indicator", key=f"ci_archive_map_{mapping.indicator_id}"):
+                        st.session_state[_m_confirm] = True
+                        st.rerun()
 
             if mapping.indicator_id in custom_indicators_data:
                 # Update existing entry
@@ -385,6 +422,122 @@ def custom_indicators():
             if mapping.relation_ship == "Mandatory" and (input_value is None or input_value == "" or (isinstance(input_value, (int, float)) and input_value < 0)):
                 missing_mandatory_fields.append(indicator.indicator_prompt)
 
+
+    # ---- User-added (custom) results indicators ---------------------------
+    # TTLs can add their own indicators beyond the admin-mapped ones. These
+    # live in the same custom_indicators blob under "custom_*" keys with a
+    # human-entered name and a "custom" flag. Soft-deleted entries are kept
+    # with "archived": True so they can be restored/audited.
+    _LEVELS = ["Outcome", "Intermediate Outcome", "Output"]
+    st.session_state.setdefault("pending_custom_indicators", {})
+    # Seed any just-added (unsaved) custom entries so they render until saved.
+    for ckey, cname in st.session_state.pending_custom_indicators.items():
+        if ckey not in custom_indicators_data:
+            custom_indicators_data[ckey] = {
+                "name": cname, "custom": True, "archived": False,
+                "level_of_result": None, "input_value": "", "baseline_value": "",
+                "year_baseline": None, "progress": "", "target_value": "",
+                "year_target": None, "data_collection": "",
+            }
+
+    ci_custom_keys = [k for k, v in custom_indicators_data.items()
+                      if isinstance(v, dict) and v.get("custom")]
+    ci_active = [k for k in ci_custom_keys if not custom_indicators_data[k].get("archived")]
+    ci_archived = [k for k in ci_custom_keys if custom_indicators_data[k].get("archived")]
+
+    if ci_active:
+        st.markdown("#### Your added indicators")
+    for ckey in ci_active:
+        entry = custom_indicators_data[ckey]
+        with st.expander(entry.get("name") or "Untitled indicator"):
+            _lvl = entry.get("level_of_result")
+            entry["level_of_result"] = st.selectbox(
+                "Level of result", _LEVELS,
+                index=_LEVELS.index(_lvl) if _lvl in _LEVELS else None,
+                key=f"ci_custom_level_{ckey}")
+            entry["input_value"] = st.text_area(
+                "Result / indicator value", value=entry.get("input_value", ""),
+                key=f"ci_custom_input_{ckey}")
+            entry["baseline_value"] = st.text_input(
+                "Baseline value", value=entry.get("baseline_value", ""),
+                key=f"ci_custom_baseline_{ckey}")
+            entry["year_baseline"] = st.number_input(
+                "Year baseline data was collected",
+                value=entry.get("year_baseline") or None,
+                min_value=1900, max_value=2100, key=f"ci_custom_ybase_{ckey}")
+            entry["progress"] = st.text_area(
+                "Explain the Progress", value=entry.get("progress", ""),
+                key=f"ci_custom_progress_{ckey}")
+            entry["target_value"] = st.text_input(
+                "Target value", value=entry.get("target_value", ""),
+                key=f"ci_custom_target_{ckey}")
+            entry["year_target"] = st.number_input(
+                "Year target data will be collected",
+                value=entry.get("year_target") or None,
+                min_value=1900, max_value=2100, key=f"ci_custom_ytarget_{ckey}")
+            entry["data_collection"] = st.text_area(
+                "How are you collecting the data?",
+                value=entry.get("data_collection", ""),
+                key=f"ci_custom_datacol_{ckey}")
+
+            # Drop with a confirm step (archived, not permanently removed).
+            confirm_key = f"ci_confirm_remove_{ckey}"
+            if st.session_state.get(confirm_key):
+                st.warning("Drop this indicator? It will be archived, not permanently deleted.")
+                _creason_key = f"ci_drop_reason_{ckey}"
+                drop_reason = st.text_input(
+                    "Reason for dropping (optional)", key=_creason_key)
+                c1, c2 = st.columns(2)
+                if c1.button("Confirm drop", key=f"ci_do_remove_{ckey}", type="primary"):
+                    # Drop unsaved drafts from pending; persist saved ones now so
+                    # the archived flag survives the per-rerun blob reload.
+                    st.session_state.pending_custom_indicators.pop(ckey, None)
+                    set_blob_entry_archived(
+                        session, trustfund_id, st.session_state.current_fiscal_year_id,
+                        "custom_indicators", ckey, True, create_if_missing=False, reason=drop_reason)
+                    st.session_state.pop(confirm_key, None)
+                    st.session_state.pop(_creason_key, None)
+                    st.rerun()
+                if c2.button("Cancel", key=f"ci_cancel_remove_{ckey}"):
+                    st.session_state.pop(confirm_key, None)
+                    st.rerun()
+            else:
+                if st.button("Drop this Results Indicator", key=f"ci_remove_{ckey}"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
+
+    # Add-an-indicator control.
+    with st.expander("➕ Add an indicator"):
+        new_name = st.text_input("Indicator name", key="new_custom_indicator_name")
+        if st.button("Add indicator", key="add_custom_indicator"):
+            if new_name and new_name.strip():
+                new_key = f"custom_{uuid.uuid4().hex[:8]}"
+                st.session_state.pending_custom_indicators[new_key] = new_name.strip()
+                st.session_state.pop("new_custom_indicator_name", None)
+                st.rerun()
+            else:
+                st.warning("Please enter a name for the new indicator.")
+
+    # Archived indicators — restore option (both custom and admin-mapped).
+    if ci_archived or archived_mapped:
+        with st.expander("🗄️ Archived indicators"):
+            for ckey in ci_archived:
+                entry = custom_indicators_data[ckey]
+                cols = st.columns([4, 1])
+                cols[0].write(entry.get("name") or "Untitled indicator")
+                if cols[1].button("Restore", key=f"ci_restore_{ckey}"):
+                    set_blob_entry_archived(
+                        session, trustfund_id, st.session_state.current_fiscal_year_id,
+                        "custom_indicators", ckey, False, create_if_missing=False)
+                    st.rerun()
+            for mkey, mname in archived_mapped:
+                cols = st.columns([4, 1])
+                cols[0].write(mname)
+                if cols[1].button("Restore", key=f"ci_restore_map_{mkey}"):
+                    set_blob_entry_archived(
+                        session, trustfund_id, st.session_state.current_fiscal_year_id,
+                        "custom_indicators", mkey, False, create_if_missing=False)
+                    st.rerun()
 
     # Check for changes in form values
     current_values = custom_indicators_data
@@ -426,6 +579,7 @@ def custom_indicators():
                     session.add(new_entry)
 
                     session.commit()
+                    export_report_safe()  # refresh the master export in the background
                     # Reset the initial values to the current values after saving
                     st.session_state.custom_indicators_initial_values = current_values
                     st.session_state.custom_indicators_unsaved_changes = False

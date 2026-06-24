@@ -92,9 +92,9 @@ def strategic_objective_progress():
         key="strat_challenges"
     )
     strategic_objective = st.text_area(
-        "Grant's strategic objective (Max 200 words) *",
+        "Grant's strategic objective *",
         value=strategic_objective,
-        placeholder="What the grant is expected to achieve to address the challenges. Max. 200 words.",
+        placeholder="What the grant is expected to achieve to address the challenges.",
         key="strat_strategic_objective"
     )
     overall_progress = st.text_area(
@@ -162,43 +162,46 @@ def strategic_objective_progress():
         ("public_communication_internal", public_communication_internal)
     ]
 
-    if st.button("Save", type="primary"):
+    save_clicked = st.button("Save", type="primary")
+
+    if save_clicked:
         # Update existing record with new values
         if existing_grant_info:
-            if not missing_fields:
-                # Clear existing entries for the current trustfund and fiscal year, matching fields
-                for field in ["challenges", "strategic_objective", "overall_progress", 
-                            "implementation_challenges", "public_communication_external", 
-                            "public_communication_internal"]:
-                    session.query(GrantInfo).filter_by(
-                        trustfund_id=st.session_state.current_trustfund_id,
-                        fiscal_year_id=st.session_state.current_fiscal_year_id,
-                        field=field
-                    ).delete()
+            # Clear existing entries for the current trustfund and fiscal year, matching fields
+            for field in ["challenges", "strategic_objective", "overall_progress",
+                        "implementation_challenges", "public_communication_external",
+                        "public_communication_internal"]:
+                session.query(GrantInfo).filter_by(
+                    trustfund_id=st.session_state.current_trustfund_id,
+                    fiscal_year_id=st.session_state.current_fiscal_year_id,
+                    field=field
+                ).delete()
 
-                for field, value in save_values:
-                    new_entry = GrantInfo(
-                        trustfund_id=st.session_state.current_trustfund_id,
-                        fiscal_year_id=st.session_state.current_fiscal_year_id,
-                        field=field,
-                        value=value,
-                        team_id=current_team_id(),
-                        deleted=False,
-                        created_at=datetime.datetime.now(),
-                        updated_at=datetime.datetime.now()
-                    )
-                    session.add(new_entry)
+            for field, value in save_values:
+                new_entry = GrantInfo(
+                    trustfund_id=st.session_state.current_trustfund_id,
+                    fiscal_year_id=st.session_state.current_fiscal_year_id,
+                    field=field,
+                    value=value,
+                    team_id=current_team_id(),
+                    deleted=False,
+                    created_at=datetime.datetime.now(),
+                    updated_at=datetime.datetime.now()
+                )
+                session.add(new_entry)
 
-                # Commit the changes to the database
-                session.commit()
+            # Commit the changes to the database
+            session.commit()
 
-                # Reset the initial values to the current values after saving
-                st.session_state.strategic_objective_initial_values = dict(current_values)
-                st.session_state.strategic_objective_unsaved_changes = False
-                st.success("Strategic objective progress saved successfully!")
+            # Reset the initial values to the current values after saving
+            st.session_state.strategic_objective_initial_values = dict(current_values)
+            st.session_state.strategic_objective_unsaved_changes = False
+            # Save always persists; missing mandatory fields are surfaced as a
+            # non-blocking note (the separate "Save draft" button is gone).
+            if missing_fields:
+                st.warning("Saved. Still incomplete: " + ", ".join(missing_fields))
             else:
-                st.error(
-                    f"Please fill in all mandatory fields: {', '.join(missing_fields)}")
+                st.success("Strategic objective progress saved successfully!")
         else:
             st.warning(
                 "No Grant Info exists! Please create one in Basic Grant Information subpage")

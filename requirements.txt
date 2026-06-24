@@ -1,7 +1,13 @@
-dotenv
-matplotlib
+streamlit==1.58.0
 pandas==2.2.3
-plotly
-sqlalchemy
-streamlit
-pyodbc==5.2.0
+plotly==6.7.0
+matplotlib==3.10.9
+SQLAlchemy==2.0.50
+python-dotenv==1.2.2
+psycopg2-binary==2.9.9
+openpyxl==3.1.5
+azure-storage-blob==12.23.1
+# On-prem SQL Server backend (db_backend=mssql) additionally needs ONE of these,
+# where the matching system libraries are available:
+#   pyodbc==5.2.0    (needs unixODBC + MS ODBC Driver)
+#   pymssql==2.3.1   (self-contained; no system ODBC driver)

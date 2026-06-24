@@ -1,0 +1,15 @@
+venv/
+.git/
+.vscode/
+.posit/
+__pycache__/
+*.pyc
+*.db
+*.sqlite3
+*.log
+*.zip
+.env
+exports/
+app.zip
+applog.txt
+build_deploy_zip.py
