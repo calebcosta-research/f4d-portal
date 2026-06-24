@@ -56,7 +56,8 @@ def _build_engine():
             f"postgresql+psycopg2://{username}:{password}@{host}:{port}/{database}"
             f"?sslmode=require"
         )
-        return create_engine(connection_string, pool_pre_ping=True, pool_recycle=1800)
+        return create_engine(connection_string, pool_pre_ping=True, pool_recycle=1800,
+                             connect_args={"connect_timeout": 10})
 
     username = os.environ.get("sql_username")
     password = quote_plus(os.environ.get("sql_password", ""))
