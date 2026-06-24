@@ -23,11 +23,24 @@ def _build_engine():
                                       package. Used on Azure App Service, whose
                                       Python image has no ODBC driver.
     """
-    backend = os.environ.get("db_backend", "mssql").lower()
+    backend = os.environ.get("db_backend", "postgres").lower()
 
     if backend == "sqlite":
         database = os.environ.get("sqlite_path", "f4d.db")
         return create_engine(f"sqlite:///{database}")
+
+    # Both server backends need a host; if it's missing the env vars aren't
+    # reaching the process (e.g. Posit Connect Vars not set/applied). Fail with
+    # a clear, diagnostic message instead of a cryptic driver import error.
+    if not os.environ.get("sql_host"):
+        raise RuntimeError(
+            "Database is not configured. Set these environment variables "
+            "(Posit Connect: content Settings > Vars): db_backend=postgres, "
+            "sql_host, sql_username, sql_password, sql_database, sql_port=5432. "
+            f"Currently seen -> db_backend={backend!r}, "
+            f"sql_host={os.environ.get('sql_host')!r}, "
+            f"sql_database={os.environ.get('sql_database')!r}."
+        )
 
     if backend == "postgres":
         # Azure Database for PostgreSQL (flexible server). psycopg2 is a
