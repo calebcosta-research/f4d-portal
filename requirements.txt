@@ -7,7 +7,7 @@ python-dotenv==1.2.2
 psycopg2-binary==2.9.9
 openpyxl==3.1.5
 azure-storage-blob==12.23.1
-# On-prem SQL Server backend (db_backend=mssql) additionally needs ONE of these,
-# where the matching system libraries are available:
-#   pyodbc==5.2.0    (needs unixODBC + MS ODBC Driver)
-#   pymssql==2.3.1   (self-contained; no system ODBC driver)
+pyodbc==5.2.0
+# pyodbc is the driver the original F4D app used on this Connect (ODBC Driver 17
+# for SQL Server), so the Connect build environment supports it. pymssql==2.3.1
+# is a self-contained fallback if a build ever lacks the system ODBC libraries.
