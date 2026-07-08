@@ -54,6 +54,68 @@ PILLAR_NAMES = {
     "pillar 4": "Pillar 4: Developing Financial Markets",
 }
 
+# Table DDL, generated from model.py via SQLAlchemy's SQL Server compiler (so it
+# is byte-for-byte what the app's create_all() would build) and listed in
+# dependency order. Each is applied only if the table is missing, so this is
+# idempotent and coexists with the app's own create_all(). {s} = schema.
+_DDL = [
+    ("countries", """CREATE TABLE {s}.countries (
+        id INTEGER NOT NULL IDENTITY, country VARCHAR(max) NOT NULL,
+        deleted BIT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id))"""),
+    ("fys", """CREATE TABLE {s}.fys (
+        id INTEGER NOT NULL IDENTITY, fy VARCHAR(max) NOT NULL,
+        deleted BIT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id))"""),
+    ("regions", """CREATE TABLE {s}.regions (
+        id INTEGER NOT NULL IDENTITY, region VARCHAR(max) NOT NULL,
+        deleted BIT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id))"""),
+    ("teams", """CREATE TABLE {s}.teams (
+        id INTEGER NOT NULL IDENTITY, team VARCHAR(max) NOT NULL,
+        deleted BIT NULL, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id))"""),
+    ("indicators", """CREATE TABLE {s}.indicators (
+        id INTEGER NOT NULL IDENTITY, indicator_id VARCHAR(max) NOT NULL,
+        parent_id VARCHAR(max) NULL, indicator_name TEXT NOT NULL,
+        standard_indicator_name TEXT NULL, indicator_prompt TEXT NULL,
+        pillar_info VARCHAR(max) NULL, tier_info VARCHAR(max) NULL,
+        indicator_definition TEXT NULL, unit_of_measurement VARCHAR(11) NULL,
+        categorical_unit TEXT NULL, indicator_conversion VARCHAR(max) NULL,
+        custom_indicator BIT NULL, team_id INTEGER NULL, deleted BIT NULL,
+        created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id), FOREIGN KEY(team_id) REFERENCES {s}.teams (id))"""),
+    ("trustfunds", """CREATE TABLE {s}.trustfunds (
+        id INTEGER NOT NULL IDENTITY, project_type VARCHAR(10) NOT NULL,
+        name VARCHAR(max) NOT NULL, description VARCHAR(max) NULL,
+        pcode VARCHAR(max) NULL, [grant] VARCHAR(max) NULL, ttl VARCHAR(max) NULL,
+        team_id INTEGER NULL, deleted BIT NULL, created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL, PRIMARY KEY (id),
+        FOREIGN KEY(team_id) REFERENCES {s}.teams (id))"""),
+    ("users", """CREATE TABLE {s}.users (
+        id INTEGER NOT NULL IDENTITY, username VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL, team_id INTEGER NULL, deleted BIT NULL,
+        created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id), UNIQUE (username),
+        FOREIGN KEY(team_id) REFERENCES {s}.teams (id))"""),
+    ("grant_info_long", """CREATE TABLE {s}.grant_info_long (
+        id INTEGER NOT NULL IDENTITY, trustfund_id INTEGER NOT NULL,
+        fiscal_year_id INTEGER NULL, field VARCHAR(max) NOT NULL, value TEXT NULL,
+        team_id INTEGER NULL, deleted BIT NULL, created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL, PRIMARY KEY (id),
+        FOREIGN KEY(trustfund_id) REFERENCES {s}.trustfunds (id),
+        FOREIGN KEY(fiscal_year_id) REFERENCES {s}.fys (id),
+        FOREIGN KEY(team_id) REFERENCES {s}.teams (id))"""),
+    ("trustfund_indicator_mapping", """CREATE TABLE {s}.trustfund_indicator_mapping (
+        id INTEGER NOT NULL IDENTITY, trustfund_id INTEGER NOT NULL,
+        indicator_id INTEGER NOT NULL, relation_ship VARCHAR(9) NOT NULL,
+        team_id INTEGER NULL, deleted BIT NULL, created_at DATETIME NOT NULL,
+        updated_at DATETIME NOT NULL, PRIMARY KEY (id),
+        FOREIGN KEY(trustfund_id) REFERENCES {s}.trustfunds (id),
+        FOREIGN KEY(indicator_id) REFERENCES {s}.indicators (id),
+        FOREIGN KEY(team_id) REFERENCES {s}.teams (id))"""),
+]
+
 
 # --------------------------------------------------------------------------- #
 # Small helpers (ported verbatim from seed_all_from_master.py)                 #
@@ -315,6 +377,13 @@ def load_record(cur, rec, fy25_id):
         addf("custom_indicators", str(res_blob))
 
 
+def create_tables(cur):
+    """Create the f4d.* tables if they don't already exist (idempotent)."""
+    for name, ddl in _DDL:
+        cur.execute(f"IF OBJECT_ID('{SCHEMA}.{name}','U') IS NULL "
+                    + ddl.format(s=SCHEMA))
+
+
 # --------------------------------------------------------------------------- #
 def main():
     records = parse(MASTER)
@@ -340,6 +409,10 @@ def main():
         port=int(os.environ.get("sql_port", "5800")),
         autocommit=False, login_timeout=15)
     cur = conn.cursor()
+
+    create_tables(cur)
+    conn.commit()
+    print(f"Tables ready in {SCHEMA}.*")
 
     for label in FISCAL_YEARS:
         ensure_fy(cur, label)
