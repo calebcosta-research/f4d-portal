@@ -229,8 +229,9 @@ def deliverables():
                     description = previous_description
                 if not data_source:
                     data_source = previous_data_source
-                if input_value is None:
-                    input_value = previous_input_value
+                # Progress (deliverable status) is intentionally NOT carried forward;
+                # each fiscal year starts blank. The prior year's value is still shown
+                # (read-only) via show_previous_fiscal_year_deliverables().
 
            # Store initial values for change tracking
             st.session_state.deliverables_initial_values[str(mapping.indicator_id)] = {

@@ -25,11 +25,11 @@ The application is organized into multiple pages, one of them containing specifi
 <u>Home:</u> Overview and instruction.<br/>
 <u>Report new results:</u> Where you can enter and manage grant details.<br/>
 <i>Basic Grant Information:</i> Enter basic details about the grant.<br/>
-<i>Strategic Objective & Progress:</i> Define the strategic objectives and progress of the grant.<br/>
-<i>Lending Operations:</i> Manage lending operations related to the grant.<br/>
-<i>Collaboration/Partnership:</i> Manage collaboration and partnership details.<br/>
-<i>Outputs/deliverables:</i> Enter and manage outputs and deliverables.<br/>
-<i>Results Indicators:</i> Define and manage results indicators for the grant.<br/>
+<i>Strategic Objective & Progress:</i> Define the strategic objectives and describe progress of the grant.<br/>
+<i>Lending Operations:</i> Enter lending operations informed by the grant.<br/>
+<i>Collaboration/Partnership:</i> Describe collaboration and partnership details.<br/>
+<i>Outputs/deliverables:</i> Enter latest data on outputs and deliverables.<br/>
+<i>Results Indicators:</i> Enter latest data of results indicators for the grant.<br/>
 <u>Download results:</u> Download grant data in CSV formats.<br/>
 
              
@@ -48,7 +48,7 @@ Each Grant ID is associated with a single user. This ensures that data entry rem
 
 <p></p>
 <h5>Troubleshooting</h5>
-If you encounter any bugs or errors while using the application, please contact fkurbonov1@worldbank.org for assistance.<br/>
+If you encounter any bugs or errors while using the application, please contact Caleb Costa (ccosta2@worldbank.org) and Sara Okada (sokada@worldbank.org) for assistance.<br/>
 <p></p>
              """, unsafe_allow_html=True)
 

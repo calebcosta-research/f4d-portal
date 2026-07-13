@@ -36,22 +36,11 @@ def _resolve_grant_context():
                 tf_id = trustfund.id
 
         if tf_id and not fy_id:
-            # Don't auto-select a FY if the user is deliberately creating a new report
-            if st.session_state.get("bgi_creating_new"):
-                return
-            # Find the distinct fiscal years saved for this trustfund
-            saved_fy_rows = (
-                session.query(GrantInfo.fiscal_year_id)
-                .filter_by(trustfund_id=tf_id, deleted=False)
-                .distinct()
-                .all()
-            )
-            saved_fy_ids = [row[0] for row in saved_fy_rows if row[0] is not None]
-            if len(saved_fy_ids) == 1:
-                # Only one year exists — auto-select it
-                st.session_state.current_fiscal_year_id = saved_fy_ids[0]
-            # If multiple years exist, leave fy_id as None; basic_grant_info's
-            # switcher is the canonical place to choose between them.
+            # Start every session on a blank canvas: leave current_fiscal_year_id as
+            # None so basic_grant_info's switcher defaults to its first option,
+            # "➕ New fiscal year report". Any saved years remain selectable there.
+            # (Previously a lone saved year was auto-loaded, so FY25 surfaced on login.)
+            pass
     finally:
         session.close()
 

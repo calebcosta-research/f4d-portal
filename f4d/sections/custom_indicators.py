@@ -257,8 +257,9 @@ def custom_indicators():
                     data_collection = previous_data_collection
                 if not level_of_result:
                     level_of_result = previous_level_of_result
-                if not input_value:
-                    input_value = previous_input_value
+                # Progress Value is intentionally NOT carried forward: each fiscal
+                # year the TTL must enter fresh progress. The prior year's value is
+                # still shown (read-only) via show_previous_fiscal_year_indicators().
 
             if mapping.indicator_id not in st.session_state.custom_indicators_initial_values:
             # Store initial values for change tracking
@@ -304,16 +305,16 @@ def custom_indicators():
                 # Display input fields based on unit_of_measurement
                 if indicator.unit_of_measurement == 'Date':
                     input_value = st.date_input(
-                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Number' or indicator.unit_of_measurement == 'Percentage':
                     input_value = st.number_input(
-                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"number_input_{mapping.id}")
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"number_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Short Text':
                     input_value = st.text_input(
-                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
                 elif indicator.unit_of_measurement == 'Long Text':
                     input_value = st.text_area(
-                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"long_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"long_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
                 # elif indicator.unit_of_measurement == 'Percentage':
                 #     input_value = st.number_input(
                 #         f"{mandatory_char}{indicator.indicator_prompt}", value=input_value,  key=f"percentage_input_{mapping.id}")
@@ -327,7 +328,7 @@ def custom_indicators():
 
                     # Display the select box with dynamically loaded categories
                     input_value = st.selectbox(
-                        f"Input value: {indicator.indicator_prompt} {mandatory_char}", categories, index=categories.index(input_value) if input_value in categories else None, key=f"categorical_input_{mapping.id}"
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", categories, index=categories.index(input_value) if input_value in categories else None, key=f"categorical_input_{mapping.id}"
                     )
                 else:
                     st.write("No valid unit of measurement provided.")
@@ -456,8 +457,11 @@ def custom_indicators():
                 index=_LEVELS.index(_lvl) if _lvl in _LEVELS else None,
                 key=f"ci_custom_level_{ckey}")
             entry["input_value"] = st.text_area(
-                "Result / indicator value", value=entry.get("input_value", ""),
+                "Progress Value", value=entry.get("input_value", ""),
                 key=f"ci_custom_input_{ckey}")
+            entry["progress"] = st.text_area(
+                "Explain the Progress", value=entry.get("progress", ""),
+                key=f"ci_custom_progress_{ckey}")
             entry["baseline_value"] = st.text_input(
                 "Baseline value", value=entry.get("baseline_value", ""),
                 key=f"ci_custom_baseline_{ckey}")
@@ -465,9 +469,6 @@ def custom_indicators():
                 "Year baseline data was collected",
                 value=entry.get("year_baseline") or None,
                 min_value=1900, max_value=2100, key=f"ci_custom_ybase_{ckey}")
-            entry["progress"] = st.text_area(
-                "Explain the Progress", value=entry.get("progress", ""),
-                key=f"ci_custom_progress_{ckey}")
             entry["target_value"] = st.text_input(
                 "Target value", value=entry.get("target_value", ""),
                 key=f"ci_custom_target_{ckey}")
