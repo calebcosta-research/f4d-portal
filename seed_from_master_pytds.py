@@ -44,11 +44,6 @@ DRY = os.environ.get("F4D_DRYRUN") == "1"
 # workbook. Any other value (or unset) leaves existing data and does a normal
 # additive load (new funds added, existing ones skipped).
 WIPE = os.environ.get("F4D_WIPE") == "YES"
-# Two projects were each issued two trust-fund numbers (a clerical oddity). The
-# alias number is loaded as a second LOGIN attached to the primary fund's team
-# (no separate fund/report), so both logins open the same submission. Mirrors
-# context.py _TF_ALIASES. Format: {alias_tfnum: primary_tfnum}.
-ALIAS_PRIMARY = {"TF0C8998": "TF0C8995", "TF0C8493": "TF0C8491"}
 
 NOW = datetime.datetime.now()
 TARGET_FY = "FY25"
@@ -225,9 +220,15 @@ def parse(path):
     all_tfs = sorted(t for t in set(deliv_by) | set(res_by) if t)
 
     records = []
-    for tfnum in all_tfs:
-        drows = deliv_by.get(tfnum, [])
-        rrows = res_by.get(tfnum, [])
+    for combined in all_tfs:
+        # A single "Trust Fund Number" cell may list more than one number (a
+        # project issued two TF#s, comma-separated). Use the first as the fund;
+        # the rest become extra logins that open the same submission.
+        numbers = [n.strip() for n in str(combined).split(",") if n.strip()]
+        tfnum = numbers[0]
+        aliases = numbers[1:]
+        drows = deliv_by.get(combined, [])
+        rrows = res_by.get(combined, [])
         meta = drows[0] if drows else rrows[0]
 
         delivs = []
@@ -272,6 +273,7 @@ def parse(path):
 
         records.append({
             "tfnum": tfnum,
+            "aliases": aliases,
             "pcode": norm(meta.get(META["pcode"])),
             "description": norm(meta.get(META["title"])) or norm(meta.get(META["grant"])),
             "ttl": norm(meta.get(META["ttl"])),
@@ -451,30 +453,25 @@ def main():
     loaded = skipped = aliased = 0
     errors = []
     for rec in records:
-        tfnum = rec["tfnum"]
-        username = f"{tfnum}_admin"
+        username = f"{rec['tfnum']}_admin"
         try:
             cur.execute(f"SELECT 1 FROM {SCHEMA}.users WHERE username=%s", (username,))
             if cur.fetchone():
                 skipped += 1
                 continue
-            if tfnum in ALIAS_PRIMARY:
-                # Alias number: add only a second login on the primary fund's team,
-                # pointing at the same submission (no separate fund/report).
-                primary_user = f"{ALIAS_PRIMARY[tfnum]}_admin"
-                cur.execute(f"SELECT team_id FROM {SCHEMA}.trustfunds WHERE name=%s",
-                            (primary_user,))
-                row = cur.fetchone()
-                if not row:
-                    errors.append((tfnum, f"primary {ALIAS_PRIMARY[tfnum]} not loaded"))
-                    continue
-                insert_row(cur, "users",
-                           ["username", "password", "team_id", "deleted", "created_at", "updated_at"],
-                           [username, f"{tfnum}_p", row[0], 0, NOW, NOW])
-                conn.commit()
-                aliased += 1
-                continue
             load_record(cur, rec, fy25_id)
+            # Extra numbers listed for the same project become additional logins on
+            # the same fund/team, so every number opens the same submission.
+            cur.execute(f"SELECT team_id FROM {SCHEMA}.trustfunds WHERE name=%s", (username,))
+            team_id = cur.fetchone()[0]
+            for alias in rec.get("aliases", []):
+                au = f"{alias}_admin"
+                cur.execute(f"SELECT 1 FROM {SCHEMA}.users WHERE username=%s", (au,))
+                if not cur.fetchone():
+                    insert_row(cur, "users",
+                               ["username", "password", "team_id", "deleted", "created_at", "updated_at"],
+                               [au, f"{alias}_p", team_id, 0, NOW, NOW])
+                    aliased += 1
             conn.commit()
             loaded += 1
         except Exception as exc:  # noqa: BLE001
@@ -482,7 +479,7 @@ def main():
             errors.append((rec["tfnum"], str(exc)[:200]))
     conn.close()
 
-    print(f"Loaded {loaded} funds, {aliased} alias logins (shared submission), "
+    print(f"Loaded {loaded} funds, {aliased} extra logins (shared submission), "
           f"skipped {skipped}, {len(errors)} errors, of {len(records)} parsed.")
     print("Login scheme: username=<TFnum>_admin  password=<TFnum>_p")
     for t, e in errors[:15]:
