@@ -15,6 +15,18 @@ from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
 
 
+def _as_number(v):
+    """Coerce a stored value to a float for st.number_input (which rejects strings);
+    returns None when the value is missing or not numeric so the field shows empty."""
+    if v is None or v == "":
+        return None
+    try:
+        f = float(v)
+        return f if (f == f and f not in (float("inf"), float("-inf"))) else None
+    except (TypeError, ValueError):
+        return None
+
+
 def show_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_year_id):
     # Create a session
     session = create_session()
@@ -245,9 +257,6 @@ def deliverables():
             }
 
             with st.expander(indicator.indicator_name):
-                if not indicator.indicator_prompt.endswith(('.', ':')):
-                    indicator.indicator_prompt += '' #'.'
-
                 show_previous_fiscal_year_deliverables(trustfund_id, str(mapping.indicator_id), st.session_state.current_fiscal_year_id)
 
                 # Display input fields with on_change callback
@@ -259,8 +268,8 @@ def deliverables():
 
                 elif indicator.unit_of_measurement == 'Number':
                     input_value = st.number_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", 
-                        value=input_value,  
+                        f"{indicator.indicator_prompt} {mandatory_char}",
+                        value=_as_number(input_value),
                         key=f"number_input_{mapping.id}")
  
                 elif indicator.unit_of_measurement == 'Short Text':
@@ -277,8 +286,8 @@ def deliverables():
                         placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
                 elif indicator.unit_of_measurement == 'Percentage':
                     input_value = st.number_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", 
-                        value=input_value,  
+                        f"{indicator.indicator_prompt} {mandatory_char}",
+                        value=_as_number(input_value),
                         key=f"percentage_input_{mapping.id}",)
                 elif indicator.unit_of_measurement == 'Categorical':
                     # Read categories from the categorical_unit column and split by ','

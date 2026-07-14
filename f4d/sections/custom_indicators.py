@@ -15,6 +15,26 @@ from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
 
 
+def _as_number(v):
+    """Coerce a stored value to a float for st.number_input (which rejects strings);
+    returns None when the value is missing or not numeric so the field shows empty."""
+    if v is None or v == "":
+        return None
+    try:
+        f = float(v)
+        return f if (f == f and f not in (float("inf"), float("-inf"))) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_year(v):
+    """Coerce a stored value to an int year for st.number_input; None if not numeric."""
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
 def show_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_id):
     # Create a session
     session = create_session()
@@ -310,7 +330,7 @@ def custom_indicators():
                         f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Number' or indicator.unit_of_measurement == 'Percentage':
                     input_value = st.number_input(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"number_input_{mapping.id}")
+                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=_as_number(input_value),  key=f"number_input_{mapping.id}")
                 elif indicator.unit_of_measurement == 'Short Text':
                     input_value = st.text_input(
                         f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
@@ -348,7 +368,7 @@ def custom_indicators():
                 )
 
                 year_baseline = st.number_input(
-                    "Year baseline data was collected", value=year_baseline, min_value=1900, max_value=2100,
+                    "Year baseline data was collected", value=_as_year(year_baseline), min_value=1900, max_value=2100,
                     key=f"year_baseline_{mapping.id}"
                 )
 
@@ -360,7 +380,7 @@ def custom_indicators():
 
                 year_target = st.number_input(
                     "Year target data will be collected",
-                    value=year_target, min_value=1900, max_value=2100,
+                    value=_as_year(year_target), min_value=1900, max_value=2100,
                     key=f"year_target_{mapping.id}"
                 )
 
