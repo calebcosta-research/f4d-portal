@@ -39,6 +39,11 @@ from openpyxl import load_workbook
 MASTER = os.environ.get("F4D_MASTER", r"C:\Users\wb620297\f4d\F4D_rd_master.xlsx")
 SCHEMA = os.environ.get("db_schema", "f4d")
 DRY = os.environ.get("F4D_DRYRUN") == "1"
+# Full-refresh guard: ONLY when F4D_WIPE == "YES" does the loader DELETE every
+# existing f4d.* row before reloading, making the database an exact mirror of the
+# workbook. Any other value (or unset) leaves existing data and does a normal
+# additive load (new funds added, existing ones skipped).
+WIPE = os.environ.get("F4D_WIPE") == "YES"
 
 NOW = datetime.datetime.now()
 TARGET_FY = "FY25"
@@ -385,6 +390,16 @@ def create_tables(cur):
 
 
 # --------------------------------------------------------------------------- #
+def wipe_f4d(cur):
+    """Delete ALL rows from the f4d.* tables (children before parents) for a full
+    refresh. Guarded by F4D_WIPE=YES. The schema and tables stay in place; only
+    their data is removed, so the subsequent load rebuilds everything from scratch."""
+    order = ["grant_info_long", "trustfund_indicator_mapping", "indicators",
+             "trustfunds", "users", "fys", "regions", "countries", "teams"]
+    for t in order:
+        cur.execute(f"DELETE FROM {SCHEMA}.{t}")
+
+
 def main():
     records = parse(MASTER)
     n_del = sum(len(r["delivs"]) for r in records)
@@ -396,6 +411,9 @@ def main():
         print(f"  e.g. {sample['tfnum']}: pcode={sample['pcode']!r} "
               f"region={sample['region']!r} country={sample['country']!r} "
               f"delivs={len(sample['delivs'])} results={len(sample['results'])}")
+    if WIPE:
+        print("** WIPE MODE ON: the real run will DELETE all existing f4d.* rows "
+              "first, then rebuild from the workbook above. **")
     if DRY:
         print("DRY RUN: parsed only, no database writes.")
         return
@@ -413,6 +431,11 @@ def main():
     create_tables(cur)
     conn.commit()
     print(f"Tables ready in {SCHEMA}.*")
+
+    if WIPE:
+        wipe_f4d(cur)
+        conn.commit()
+        print("WIPED all existing rows from f4d.* — rebuilding from the workbook.")
 
     for label in FISCAL_YEARS:
         ensure_fy(cur, label)
