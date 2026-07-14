@@ -236,15 +236,31 @@ def basic_grant_info():
     else:
         f4d_association = None
 
-    # Region Selection
+    # Region Selection.
+    # Curate the dropdown: drop the deprecated "Middle East and North Africa"
+    # option and give the MENAAP entry a clearer label. Stored value is region_id,
+    # so renaming the display text is safe.
+    _REGION_DROP = {"middle east and north africa"}
+    _REGION_RENAME = {
+        "mid east,north africa,afg,pak": "Middle East, North Africa, Afghanistan, & Pakistan",
+    }
+    region_options = []
+    for _name, _rid in data["regions"]:
+        _key = (_name or "").strip().lower()
+        # Hide the dropped region from new selections, but keep it if it is this
+        # record's current region so an existing report isn't silently blanked.
+        if _key in _REGION_DROP and _rid != region_id:
+            continue
+        region_options.append((_REGION_RENAME.get(_key, _name), _rid))
+
     region = st.selectbox("Region: *",
-                            [option[0] for option in data["regions"]],
+                            [opt[0] for opt in region_options],
                             index=None if not region_id else next(
-                                (i for i, option in enumerate(data["regions"]) if option[1] == region_id), None),
+                                (i for i, opt in enumerate(region_options) if opt[1] == region_id), None),
                             key="bgi_region")
     # Update region_id
     if region:
-        region_id = next((r[1] for r in data["regions"] if r[0] == region), None)
+        region_id = next((rid for disp, rid in region_options if disp == region), None)
 
     # Country Selection
     default_countries = country.split(', ') if isinstance(country, str) else country or []

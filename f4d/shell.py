@@ -346,7 +346,6 @@ def display_main_app():
         home()
     elif current_main == "Report new results":
         _resolve_grant_context()
-        _show_report_mode_banner()
         if current_sub == "Basic Grant Information":
             basic_grant_info()
         elif current_sub == "Strategic Objective & Progress":

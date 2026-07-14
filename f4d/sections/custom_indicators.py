@@ -302,6 +302,8 @@ def custom_indicators():
                     key=f"level_of_result_{mapping.id}"
                 )
 
+                st.markdown(f"**Unit of measure:** {indicator.unit_of_measurement or 'Not specified'}")
+
                 # Display input fields based on unit_of_measurement
                 if indicator.unit_of_measurement == 'Date':
                     input_value = st.date_input(
@@ -430,13 +432,14 @@ def custom_indicators():
     # human-entered name and a "custom" flag. Soft-deleted entries are kept
     # with "archived": True so they can be restored/audited.
     _LEVELS = ["Outcome", "Intermediate Outcome", "Output"]
+    _UNIT_OPTIONS = ["Number", "Percentage", "Short Text", "Long Text", "Date", "Categorical"]
     st.session_state.setdefault("pending_custom_indicators", {})
     # Seed any just-added (unsaved) custom entries so they render until saved.
     for ckey, cname in st.session_state.pending_custom_indicators.items():
         if ckey not in custom_indicators_data:
             custom_indicators_data[ckey] = {
                 "name": cname, "custom": True, "archived": False,
-                "level_of_result": None, "input_value": "", "baseline_value": "",
+                "level_of_result": None, "unit": "", "input_value": "", "baseline_value": "",
                 "year_baseline": None, "progress": "", "target_value": "",
                 "year_target": None, "data_collection": "",
             }
@@ -456,6 +459,12 @@ def custom_indicators():
                 "Level of result", _LEVELS,
                 index=_LEVELS.index(_lvl) if _lvl in _LEVELS else None,
                 key=f"ci_custom_level_{ckey}")
+            _unit = entry.get("unit")
+            entry["unit"] = st.selectbox(
+                "Unit of measure", _UNIT_OPTIONS,
+                index=_UNIT_OPTIONS.index(_unit) if _unit in _UNIT_OPTIONS else None,
+                key=f"ci_custom_unit_{ckey}",
+                help="What kind of value should be entered for this indicator's Progress Value?")
             entry["input_value"] = st.text_area(
                 "Progress Value", value=entry.get("input_value", ""),
                 key=f"ci_custom_input_{ckey}")

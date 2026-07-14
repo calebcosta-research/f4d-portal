@@ -30,7 +30,6 @@ The application is organized into multiple pages, one of them containing specifi
 <i>Collaboration/Partnership:</i> Describe collaboration and partnership details.<br/>
 <i>Outputs/deliverables:</i> Enter latest data on outputs and deliverables.<br/>
 <i>Results Indicators:</i> Enter latest data of results indicators for the grant.<br/>
-<u>Download results:</u> Download grant data in CSV formats.<br/>
 
              
 <h5>Important Notes</h5>
@@ -39,12 +38,8 @@ Data Protection: Make sure to save your results frequently to avoid losing any d
 
 <p></p>             
 <h5>Session Management</h5>
-Navigating Between Sections: You can navigate between sections without losing your data. Your session will remain active, and all entered data will be retained.<br/>
-Navigating Between Pages: Be cautious when switching between different pages, as this will reset your session and you may lose any unsaved data.<br/>
-
-<p></p>               
-<h5>User Association</h5>
-Each Grant ID is associated with a single user. This ensures that data entry remains organized and unique to each user.<br/>
+Within <i>Report new results</i>, you can move between its numbered sections (Basic Grant Information, Strategic Objective &amp; Progress, Lending Operations, Collaboration/Partnership, Outputs/deliverables, and Results Indicators) freely — your entries are kept as you go.<br/>
+Leaving <i>Report new results</i> — for example, returning to <i>Home</i> — can clear anything you have not saved, so click <b>Save</b> before you navigate away.<br/>
 
 <p></p>
 <h5>Troubleshooting</h5>
