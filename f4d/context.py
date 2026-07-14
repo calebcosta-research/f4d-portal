@@ -10,6 +10,17 @@ def normalize(value):
     return value if value is not None else ""
 
 
+# Two projects were each issued two trust-fund numbers (a clerical oddity). The
+# second ("alias") login maps to the first ("primary") so both logins resolve to
+# the same trust fund and share one submission. The alias login user is created
+# on the primary fund's team by seed_from_master_pytds.py, so the team filter in
+# the lookups still matches. Format: {alias_username: primary_username}.
+_TF_ALIASES = {
+    "TF0C8998_admin": "TF0C8995_admin",
+    "TF0C8493_admin": "TF0C8491_admin",
+}
+
+
 def _resolve_grant_context():
     """Ensure current_trustfund_id and current_fiscal_year_id are set in session state.
 
@@ -63,8 +74,9 @@ def current_username():
     if current_user is None:
         st.error("User not found.")
         return
+    # Resolve alias logins to their primary so both share one trust fund/report.
     username = current_user.username
-    return username
+    return _TF_ALIASES.get(username, username)
 
 
 def current_grantname():
@@ -87,7 +99,8 @@ def current_trustfund_id():
         return None
 
     # Assuming there's a relationship between User and TrustFund
-    trustfund = session.query(TrustFund).filter_by(name=current_user.username).first()
+    # (current_username() maps alias logins to their primary fund).
+    trustfund = session.query(TrustFund).filter_by(name=current_username()).first()
     
     if trustfund is None:
         st.error("No Trust Fund associated with the current user's team.")

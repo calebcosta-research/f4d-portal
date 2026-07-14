@@ -44,6 +44,11 @@ DRY = os.environ.get("F4D_DRYRUN") == "1"
 # workbook. Any other value (or unset) leaves existing data and does a normal
 # additive load (new funds added, existing ones skipped).
 WIPE = os.environ.get("F4D_WIPE") == "YES"
+# Two projects were each issued two trust-fund numbers (a clerical oddity). The
+# alias number is loaded as a second LOGIN attached to the primary fund's team
+# (no separate fund/report), so both logins open the same submission. Mirrors
+# context.py _TF_ALIASES. Format: {alias_tfnum: primary_tfnum}.
+ALIAS_PRIMARY = {"TF0C8998": "TF0C8995", "TF0C8493": "TF0C8491"}
 
 NOW = datetime.datetime.now()
 TARGET_FY = "FY25"
@@ -443,14 +448,31 @@ def main():
     cur.execute(f"SELECT id FROM {SCHEMA}.fys WHERE fy=%s", (TARGET_FY,))
     fy25_id = cur.fetchone()[0]
 
-    loaded = skipped = 0
+    loaded = skipped = aliased = 0
     errors = []
     for rec in records:
-        username = f"{rec['tfnum']}_admin"
+        tfnum = rec["tfnum"]
+        username = f"{tfnum}_admin"
         try:
             cur.execute(f"SELECT 1 FROM {SCHEMA}.users WHERE username=%s", (username,))
             if cur.fetchone():
                 skipped += 1
+                continue
+            if tfnum in ALIAS_PRIMARY:
+                # Alias number: add only a second login on the primary fund's team,
+                # pointing at the same submission (no separate fund/report).
+                primary_user = f"{ALIAS_PRIMARY[tfnum]}_admin"
+                cur.execute(f"SELECT team_id FROM {SCHEMA}.trustfunds WHERE name=%s",
+                            (primary_user,))
+                row = cur.fetchone()
+                if not row:
+                    errors.append((tfnum, f"primary {ALIAS_PRIMARY[tfnum]} not loaded"))
+                    continue
+                insert_row(cur, "users",
+                           ["username", "password", "team_id", "deleted", "created_at", "updated_at"],
+                           [username, f"{tfnum}_p", row[0], 0, NOW, NOW])
+                conn.commit()
+                aliased += 1
                 continue
             load_record(cur, rec, fy25_id)
             conn.commit()
@@ -460,8 +482,8 @@ def main():
             errors.append((rec["tfnum"], str(exc)[:200]))
     conn.close()
 
-    print(f"Loaded {loaded}, skipped {skipped} (already present), "
-          f"{len(errors)} errors, of {len(records)} trust funds.")
+    print(f"Loaded {loaded} funds, {aliased} alias logins (shared submission), "
+          f"skipped {skipped}, {len(errors)} errors, of {len(records)} parsed.")
     print("Login scheme: username=<TFnum>_admin  password=<TFnum>_p")
     for t, e in errors[:15]:
         print(f"  ERROR {t}: {e}")

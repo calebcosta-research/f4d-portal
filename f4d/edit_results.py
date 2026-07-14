@@ -11,6 +11,7 @@ from f4d.data_access import (
     get_long_format_value, update_long_format_field,
     delete_long_format_field,
 )
+from f4d.context import current_username
 from f4d.exports import read_data
 
 
@@ -32,7 +33,7 @@ def all_grants():
         team_id = current_user.team_id
 
         current_trustfund = session.query(TrustFund).filter(
-            TrustFund.team_id == team_id, TrustFund.name == current_user.username).first()
+            TrustFund.team_id == team_id, TrustFund.name == current_username()).first()
 
         if current_trustfund is None:
             st.error("Trust Fund not found.")
