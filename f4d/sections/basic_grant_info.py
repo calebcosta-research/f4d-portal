@@ -4,7 +4,7 @@ import datetime
 import streamlit as st
 from connection import create_session
 from model import (
-    F4DAssociationEnum, GrantInfo,
+    F4DAssociationEnum, GrantInfo, Region,
 )
 from f4d.context import (
     current_team_id, current_trustfund_id,
@@ -236,35 +236,77 @@ def basic_grant_info():
     else:
         f4d_association = None
 
-    # Region Selection.
-    # Curate the dropdown: drop the deprecated "Middle East and North Africa"
-    # option and give the MENAAP entry a clearer label. Stored value is region_id,
-    # so renaming the display text is safe.
-    _REGION_DROP = {"middle east and north africa"}
-    _REGION_RENAME = {
-        "mid east,north africa,afg,pak": "Middle East, North Africa, Afghanistan, & Pakistan",
-    }
-    region_options = []
+    # Region Selection. Offer the canonical WB region list (so options like
+    # "Middle East, North Africa, Afghanistan, & Pakistan" are always available),
+    # merged with any regions already in the data so existing records still show.
+    # Region is stored as region_id, so a newly chosen canonical region is
+    # get-or-created in the Region table when selected. Deprecated MENA labels are
+    # dropped from new selections.
+    _CANONICAL_REGIONS = [
+        "East Asia and Pacific",
+        "Europe and Central Asia",
+        "Latin America and Caribbean",
+        "Middle East, North Africa, Afghanistan, & Pakistan",
+        "South Asia",
+        "Eastern and Southern Africa",
+        "Western and Central Africa",
+        "Africa",
+        "Global",
+    ]
+    _REGION_DROP = {"middle east and north africa", "mid east,north africa,afg,pak"}
+    _canon_by_lower = {r.lower(): r for r in _CANONICAL_REGIONS}
+    _region_id_by_name = {name: rid for name, rid in data["regions"]}
+    # The record's stored region -> canonical display if it maps to one (the loaded
+    # data is title-cased, e.g. "Europe And Central Asia").
+    _raw_current = next((n for n, i in data["regions"] if i == region_id), None)
+    _current_region_name = _canon_by_lower.get((_raw_current or "").strip().lower(), _raw_current)
+
+    _region_names = list(_CANONICAL_REGIONS)
     for _name, _rid in data["regions"]:
-        _key = (_name or "").strip().lower()
-        # Hide the dropped region from new selections, but keep it if it is this
-        # record's current region so an existing report isn't silently blanked.
-        if _key in _REGION_DROP and _rid != region_id:
-            continue
-        region_options.append((_REGION_RENAME.get(_key, _name), _rid))
+        _low = (_name or "").strip().lower()
+        if _low in _canon_by_lower or _low in _REGION_DROP:
+            continue  # a canonical option already covers it, or it's deprecated
+        if _name not in _region_names:
+            _region_names.append(_name)
+    if _current_region_name and _current_region_name not in _region_names:
+        _region_names.append(_current_region_name)
 
-    region = st.selectbox("Region: *",
-                            [opt[0] for opt in region_options],
-                            index=None if not region_id else next(
-                                (i for i, opt in enumerate(region_options) if opt[1] == region_id), None),
-                            key="bgi_region")
-    # Update region_id
+    region = st.selectbox(
+        "Region: *", _region_names,
+        index=_region_names.index(_current_region_name) if _current_region_name in _region_names else None,
+        key="bgi_region")
+    # Resolve to region_id: exact match, else an existing case-insensitive match
+    # (reuse the title-cased row), else get-or-create a row for this name.
     if region:
-        region_id = next((rid for disp, rid in region_options if disp == region), None)
+        region_id = _region_id_by_name.get(region)
+        if region_id is None:
+            for _n, _i in data["regions"]:
+                if _n and _n.strip().lower() == region.strip().lower():
+                    region_id = _i
+                    break
+        if region_id is None:
+            _r = session.query(Region).filter_by(region=region).first()
+            if not _r:
+                _r = Region(region=region, created_at=datetime.datetime.now(),
+                            updated_at=datetime.datetime.now())
+                session.add(_r)
+                session.commit()
+            region_id = _r.id
 
-    # Country Selection
+    # Country Selection. Merge the data's countries with a canonical set so the
+    # regions' countries (e.g. Afghanistan and the other MENAAP countries) are
+    # selectable even if no loaded grant used them. Country is stored by name.
+    _EXTRA_COUNTRIES = [
+        "Afghanistan", "Pakistan", "Algeria", "Bahrain", "Djibouti", "Egypt",
+        "Iran", "Iraq", "Jordan", "Kuwait", "Lebanon", "Libya", "Malta",
+        "Morocco", "Oman", "Qatar", "Saudi Arabia", "Syria", "Tunisia",
+        "United Arab Emirates", "West Bank and Gaza", "Yemen",
+    ]
     default_countries = country.split(', ') if isinstance(country, str) else country or []
-    country = st.multiselect("Country (multiple choice): *", sorted([c[0] for c in data["countries"]]), default=default_countries, key="bgi_country")
+    _country_opts = sorted(
+        set(c[0] for c in data["countries"]) | set(_EXTRA_COUNTRIES) | set(default_countries))
+    country = st.multiselect("Country (multiple choice): *", _country_opts,
+                             default=default_countries, key="bgi_country")
 
     # Pillars Selection
     pillars = st.multiselect("Select the pillar(s) this grant contributes to (multiple choice): *",

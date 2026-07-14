@@ -432,7 +432,7 @@ def custom_indicators():
     # human-entered name and a "custom" flag. Soft-deleted entries are kept
     # with "archived": True so they can be restored/audited.
     _LEVELS = ["Outcome", "Intermediate Outcome", "Output"]
-    _UNIT_OPTIONS = ["Number", "Percentage", "Short Text", "Long Text", "Date", "Categorical"]
+    _UNIT_OPTIONS = ["Number", "Text", "Yes/No", "US$"]
     st.session_state.setdefault("pending_custom_indicators", {})
     # Seed any just-added (unsaved) custom entries so they render until saved.
     for ckey, cname in st.session_state.pending_custom_indicators.items():
