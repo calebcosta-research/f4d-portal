@@ -35,6 +35,24 @@ def _as_year(v):
         return None
 
 
+# Friendly data-type options shown in the "Unit of measure" dropdown (used for
+# both admin-mapped and TTL-added indicators).
+_UNIT_OPTIONS = ["Number", "Text", "Yes/No", "US$"]
+
+
+def _friendly_unit(model_unit):
+    """Map a stored model unit to one of the friendly dropdown options so the
+    dropdown can be prepopulated with a sensible default."""
+    u = (model_unit or "").strip().lower()
+    if u in ("number", "percentage", "count"):
+        return "Number"
+    if u in ("us$", "usd"):
+        return "US$"
+    if u in ("yes/no", "boolean", "bool"):
+        return "Yes/No"
+    return "Text"
+
+
 def show_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_id):
     # Create a session
     session = create_session()
@@ -248,6 +266,10 @@ def custom_indicators():
             year_target = custom_indicators_data.get(str(mapping.indicator_id), {}).get("year_target", None)
             data_collection = custom_indicators_data.get(str(mapping.indicator_id), {}).get("data_collection", "")
             level_of_result = custom_indicators_data.get(str(mapping.indicator_id), {}).get("level_of_result", None)
+            # Unit of measure: use a saved override if the TTL previously changed
+            # it, otherwise prepopulate from the indicator's configured type.
+            unit = custom_indicators_data.get(str(mapping.indicator_id), {}).get("unit") \
+                or _friendly_unit(indicator.unit_of_measurement)
 
 
             # Fetch previous fiscal year indicators
@@ -291,7 +313,8 @@ def custom_indicators():
                     "target_value": target_value,
                     "year_target": year_target if year_target else None,
                     "data_collection": data_collection,
-                    "level_of_result": level_of_result if level_of_result else None
+                    "level_of_result": level_of_result if level_of_result else None,
+                    "unit": unit if unit else None
                 }
             else:
                 # Update existing entry in initial values
@@ -303,7 +326,8 @@ def custom_indicators():
                     "target_value": target_value,
                     "year_target": year_target if year_target else None,
                     "data_collection": data_collection,
-                    "level_of_result": level_of_result if level_of_result else None
+                    "level_of_result": level_of_result if level_of_result else None,
+                    "unit": unit if unit else None
                 })
 
             with st.expander(indicator.indicator_name):
@@ -322,39 +346,31 @@ def custom_indicators():
                     key=f"level_of_result_{mapping.id}"
                 )
 
-                st.markdown(f"**Unit of measure:** {indicator.unit_of_measurement or 'Not specified'}")
+                # Unit of measure — prepopulated from the indicator's configured
+                # type but editable, so the TTL can correct the data type. The
+                # chosen value drives which kind of Progress Value input shows.
+                unit = st.selectbox(
+                    "Unit of measure", _UNIT_OPTIONS,
+                    index=_UNIT_OPTIONS.index(unit) if unit in _UNIT_OPTIONS else None,
+                    key=f"unit_sel_{mapping.id}",
+                    help="What kind of value is entered for this indicator? "
+                         "Change it if the pre-filled type is wrong.")
 
-                # Display input fields based on unit_of_measurement
-                if indicator.unit_of_measurement == 'Date':
-                    input_value = st.date_input(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"date_input_{mapping.id}")
-                elif indicator.unit_of_measurement == 'Number' or indicator.unit_of_measurement == 'Percentage':
+                _plabel = f"Progress Value: {indicator.indicator_prompt} {mandatory_char}"
+                if unit in ("Number", "US$"):
                     input_value = st.number_input(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=_as_number(input_value),  key=f"number_input_{mapping.id}")
-                elif indicator.unit_of_measurement == 'Short Text':
-                    input_value = st.text_input(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"short_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
-                elif indicator.unit_of_measurement == 'Long Text':
-                    input_value = st.text_area(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", value=input_value,  key=f"long_text_input_{mapping.id}", placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
-                # elif indicator.unit_of_measurement == 'Percentage':
-                #     input_value = st.number_input(
-                #         f"{mandatory_char}{indicator.indicator_prompt}", value=input_value,  key=f"percentage_input_{mapping.id}")
-                elif indicator.unit_of_measurement == 'Categorical':
-                    # Read categories from the categorical_unit column and split by ','
-                    if indicator.categorical_unit:
-                        categories = [cat.strip()
-                                      for cat in indicator.categorical_unit.split(',')]
-                    else:
-                        categories = []  # Handle the case where categorical_unit is None or empty
-
-                    # Display the select box with dynamically loaded categories
+                        _plabel, value=_as_number(input_value), key=f"number_input_{mapping.id}")
+                elif unit == "Yes/No":
+                    _yn = ["Yes", "No"]
                     input_value = st.selectbox(
-                        f"Progress Value: {indicator.indicator_prompt} {mandatory_char}", categories, index=categories.index(input_value) if input_value in categories else None, key=f"categorical_input_{mapping.id}"
-                    )
-                else:
-                    st.write("No valid unit of measurement provided.")
-                    continue
+                        _plabel, _yn,
+                        index=_yn.index(input_value) if input_value in _yn else None,
+                        key=f"yesno_input_{mapping.id}")
+                else:  # Text (default)
+                    input_value = st.text_input(
+                        _plabel, value=("" if input_value in (None, "") else str(input_value)),
+                        key=f"text_input_{mapping.id}",
+                        placeholder=f"{indicator.indicator_definition if indicator.indicator_definition else ''}")
 
                 progress = st.text_area(
                     "Explain the Progress",
@@ -426,6 +442,7 @@ def custom_indicators():
                     "year_target": year_target if year_target else None,
                     "data_collection": data_collection if data_collection else '',
                     "level_of_result": level_of_result if level_of_result else None,
+                    "unit": unit if unit else None,
                 })
             else:
                 # Add new entry
@@ -438,6 +455,7 @@ def custom_indicators():
                     "year_target": year_target if year_target else None,
                     "data_collection": data_collection if data_collection else '',
                     "level_of_result": level_of_result if level_of_result else None,
+                    "unit": unit if unit else None,
                 }
 
             # Check if the field is mandatory and ensure it has a value
@@ -452,7 +470,6 @@ def custom_indicators():
     # human-entered name and a "custom" flag. Soft-deleted entries are kept
     # with "archived": True so they can be restored/audited.
     _LEVELS = ["Outcome", "Intermediate Outcome", "Output"]
-    _UNIT_OPTIONS = ["Number", "Text", "Yes/No", "US$"]
     st.session_state.setdefault("pending_custom_indicators", {})
     # Seed any just-added (unsaved) custom entries so they render until saved.
     for ckey, cname in st.session_state.pending_custom_indicators.items():
