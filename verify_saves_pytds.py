@@ -146,7 +146,8 @@ def overview(cur):
 def focus(cur, tf):
     S = SCHEMA
     print(f"\nFocus on grant matching '{tf}':\n")
-    cur.execute(f"SELECT id, name, grant, ttl FROM {S}.trustfunds "
+    # [grant] must be bracketed -- GRANT is a reserved T-SQL keyword.
+    cur.execute(f"SELECT id, name, [grant], ttl FROM {S}.trustfunds "
                 f"WHERE deleted=0 AND name LIKE %s", ("%" + tf + "%",))
     matches = cur.fetchall()
     if not matches:
