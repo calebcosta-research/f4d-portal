@@ -178,11 +178,13 @@ def custom_indicators():
     mappings = session.query(TrustFundIndicatorMapping).filter(
         TrustFundIndicatorMapping.trustfund_id == trustfund_id).all()
 
-    # Check if there are no mappings
+    # No admin-mapped indicators for this grant: do NOT return early, or the
+    # "Add an indicator" control and the Save button below become unreachable.
+    # Fall through with an empty mapping list so the TTL can add their own.
     if not mappings:
-        st.write(
-            f"No indicators found for the provided Trust Fund - {trustfund.name}")
-        return
+        st.info(
+            "This grant has no predefined results indicators. "
+            'Use "Add an indicator" below to add your own.')
 
     # Initialize a dictionary to hold input values for all indicators
     custom_indicators_data = {}
@@ -306,7 +308,7 @@ def custom_indicators():
             if mapping.indicator_id not in st.session_state.custom_indicators_initial_values:
             # Store initial values for change tracking
                 st.session_state.custom_indicators_initial_values[str(mapping.indicator_id)] = {
-                    "input_value": input_value if input_value else None,
+                    "input_value": input_value if input_value not in (None, "") else None,
                     "baseline_value": baseline_value if baseline_value else '',
                     "year_baseline": year_baseline if year_baseline else None,
                     "progress": progress,
@@ -319,7 +321,7 @@ def custom_indicators():
             else:
                 # Update existing entry in initial values
                 st.session_state.custom_indicators_initial_values[str(mapping.indicator_id)].update({
-                    "input_value": input_value if input_value else None,
+                    "input_value": input_value if input_value not in (None, "") else None,
                     "baseline_value": baseline_value if baseline_value else '',
                     "year_baseline": year_baseline if year_baseline else None,
                     "progress": progress,
@@ -434,7 +436,7 @@ def custom_indicators():
             if mapping.indicator_id in custom_indicators_data:
                 # Update existing entry
                 custom_indicators_data[str(mapping.indicator_id)].update({
-                    "input_value": input_value if input_value else None,
+                    "input_value": input_value if input_value not in (None, "") else None,
                     "baseline_value": baseline_value if baseline_value else '',
                     "year_baseline": year_baseline if year_baseline else None,
                     "progress": progress if progress else '',
@@ -447,7 +449,7 @@ def custom_indicators():
             else:
                 # Add new entry
                 custom_indicators_data[str(mapping.indicator_id)] = {
-                    "input_value": input_value if input_value else None,
+                    "input_value": input_value if input_value not in (None, "") else None,
                     "baseline_value": baseline_value if baseline_value else '',
                     "year_baseline": year_baseline if year_baseline else None,
                     "progress": progress if progress else '',
@@ -604,42 +606,45 @@ def custom_indicators():
     if st.button("Save", key=f"save_custom_indicator", type="primary"):
         if custom_indicators_data:
             if existing_grant_info:
-                if missing_mandatory_fields == []:  # Check if there are missing mandatory fields
-                    # Clear existing entries for the current trustfund and fiscal year
-                    session.query(GrantInfo).filter(
-                        GrantInfo.trustfund_id == existing_grant_info.trustfund_id,
-                        GrantInfo.fiscal_year_id == existing_grant_info.fiscal_year_id,
-                        GrantInfo.field == "custom_indicators"
-                    ).delete(synchronize_session=False)
-                    
-                    # Save new values in long format using keys as they are
-                    new_entry = GrantInfo(
-                        trustfund_id=st.session_state.current_trustfund_id,
-                        fiscal_year_id=st.session_state.current_fiscal_year_id,
-                        field="custom_indicators",
-                        value=str(custom_indicators_data),
-                        team_id=current_team_id(),
-                        deleted=False,
-                        created_at=datetime.datetime.now(),
-                        updated_at=datetime.datetime.now()
-                    )
-                    session.add(new_entry)
+                # Clear existing entries for the current trustfund and fiscal year
+                session.query(GrantInfo).filter(
+                    GrantInfo.trustfund_id == existing_grant_info.trustfund_id,
+                    GrantInfo.fiscal_year_id == existing_grant_info.fiscal_year_id,
+                    GrantInfo.field == "custom_indicators"
+                ).delete(synchronize_session=False)
 
-                    session.commit()
-                    export_report_safe()  # refresh the master export in the background
-                    # Reset the initial values to the current values after saving
-                    st.session_state.custom_indicators_initial_values = current_values
-                    st.session_state.custom_indicators_unsaved_changes = False
-                    st.success("Custom Indicators saved successfully!")
+                # Save new values in long format using keys as they are
+                new_entry = GrantInfo(
+                    trustfund_id=st.session_state.current_trustfund_id,
+                    fiscal_year_id=st.session_state.current_fiscal_year_id,
+                    field="custom_indicators",
+                    value=str(custom_indicators_data),
+                    team_id=current_team_id(),
+                    deleted=False,
+                    created_at=datetime.datetime.now(),
+                    updated_at=datetime.datetime.now()
+                )
+                session.add(new_entry)
+
+                session.commit()
+                export_report_safe()  # refresh the master export in the background
+                # Reset the initial values to the current values after saving
+                st.session_state.custom_indicators_initial_values = current_values
+                st.session_state.custom_indicators_unsaved_changes = False
+                # Save ALWAYS persists so nothing the TTL entered is discarded;
+                # missing mandatory fields are surfaced as a non-blocking note
+                # (mirrors the Outputs/Deliverables save behavior).
+                if missing_mandatory_fields:
+                    st.warning("Saved. Still incomplete: " +
+                               ", ".join(missing_mandatory_fields))
                 else:
-                    st.error("Please fill in all mandatory fields: " +
-                             ", ".join(missing_mandatory_fields))
+                    st.success("Results indicators saved successfully!")
             else:
                 st.warning(
                     "No Grant Info exists! Please create one in Basic Grant Information subpage")
 
         else:
-            st.error("No custom indicators were captured.")
+            st.error("No results indicators were captured.")
 
     # Display notification if there are unsaved changes
     if st.session_state.custom_indicators_unsaved_changes:

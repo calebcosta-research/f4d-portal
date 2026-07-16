@@ -155,11 +155,12 @@ def deliverables():
     mappings = session.query(TrustFundIndicatorMapping).filter(
         TrustFundIndicatorMapping.trustfund_id == trustfund_id).all()
 
-    # Check if there are no mappings
+    # No admin-mapped deliverables for this grant: do NOT return early, or the
+    # "Add a deliverable" control and the Save button below become unreachable.
     if not mappings:
-        st.write(
-            f"No deliverables found for the provided Trust Fund - {trustfund.name}")
-        return
+        st.info(
+            "This grant has no predefined deliverables. "
+            'Use "Add a deliverable" below to add your own.')
 
     # Initialize a dictionary to hold input values for all deliverables
     deliverables_data = {}
