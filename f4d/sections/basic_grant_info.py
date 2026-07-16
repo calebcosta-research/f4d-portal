@@ -39,6 +39,19 @@ def basic_grant_info():
     # Build a mapping of fy label → id for the fiscal years that have saved data
     saved_fy_options = [(fy_label, fy_id) for fy_label, fy_id in data["fiscal_years"] if fy_id in saved_fy_ids]
 
+    # Auto-resume the current reporting year. If the TTL already has a saved
+    # report for the newest fiscal year (e.g. FY26) and hasn't explicitly chosen
+    # to start a new one, load it instead of defaulting to a blank "New report"
+    # — otherwise a returning TTL sees an empty form and thinks their work is
+    # gone. Only the NEWEST fiscal year is auto-loaded, so prior seeded years
+    # (e.g. FY25) still never pre-fill a fresh report.
+    _newest_fy_id = max((fy_id for _, fy_id in data["fiscal_years"]), default=None)
+    if (st.session_state.current_fiscal_year_id is None
+            and not st.session_state.get("bgi_creating_new")
+            and _newest_fy_id is not None
+            and _newest_fy_id in saved_fy_ids):
+        st.session_state.current_fiscal_year_id = _newest_fy_id
+
     _NEW_LABEL = "➕ New fiscal year report"
 
     # Show the FY switcher whenever at least one saved year exists so the user
