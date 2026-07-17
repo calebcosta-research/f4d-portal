@@ -306,18 +306,54 @@ def basic_grant_info():
                 session.commit()
             region_id = _r.id
 
-    # Country Selection. Merge the data's countries with a canonical set so the
-    # regions' countries (e.g. Afghanistan and the other MENAAP countries) are
-    # selectable even if no loaded grant used them. Country is stored by name.
-    _EXTRA_COUNTRIES = [
-        "Afghanistan", "Pakistan", "Algeria", "Bahrain", "Djibouti", "Egypt",
-        "Iran", "Iraq", "Jordan", "Kuwait", "Lebanon", "Libya", "Malta",
-        "Morocco", "Oman", "Qatar", "Saudi Arabia", "Syria", "Tunisia",
-        "United Arab Emirates", "West Bank and Gaza", "Yemen",
+    # Country Selection. Merge the data's countries with a full canonical list so
+    # EVERY country is selectable even if no loaded grant used it (a previous
+    # MENAAP-only extras list left many, e.g. South Africa, unavailable). Country
+    # is stored by name (no FK), so any name here is safe to save.
+    _ALL_COUNTRIES = [
+        "Afghanistan", "Albania", "Algeria", "Andorra", "Angola",
+        "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria",
+        "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus",
+        "Belgium", "Belize", "Benin", "Bhutan", "Bolivia",
+        "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei Darussalam",
+        "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia",
+        "Cameroon", "Canada", "Central African Republic", "Chad", "Chile",
+        "China", "Colombia", "Comoros", "Congo, Dem. Rep.", "Congo, Rep.",
+        "Costa Rica", "Côte d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia",
+        "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador",
+        "Egypt, Arab Rep.", "El Salvador", "Equatorial Guinea", "Eritrea",
+        "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon",
+        "Gambia, The", "Georgia", "Germany", "Ghana", "Greece", "Grenada",
+        "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras",
+        "Hungary", "Iceland", "India", "Indonesia", "Iran, Islamic Rep.", "Iraq",
+        "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan",
+        "Kenya", "Kiribati", "Korea, Dem. People's Rep.", "Korea, Rep.", "Kosovo",
+        "Kuwait", "Kyrgyz Republic", "Lao People's Democratic Republic",
+        "Latvia", "Lebanon", "Lesotho",
+        "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+        "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta",
+        "Marshall Islands", "Mauritania", "Mauritius", "Mexico",
+        "Micronesia, Fed. Sts.", "Moldova", "Monaco", "Mongolia", "Montenegro",
+        "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal",
+        "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria",
+        "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Panama",
+        "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland",
+        "Portugal", "Qatar", "Romania", "Russian Federation", "Rwanda", "Samoa",
+        "San Marino", "São Tomé and Príncipe", "Saudi Arabia", "Senegal",
+        "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovak Republic",
+        "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan",
+        "Spain", "Sri Lanka", "St. Kitts and Nevis", "St. Lucia",
+        "St. Vincent and the Grenadines", "Sudan", "Suriname", "Sweden",
+        "Switzerland", "Syrian Arab Republic", "Tajikistan", "Tanzania",
+        "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago",
+        "Tunisia", "Türkiye", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine",
+        "United Arab Emirates", "United Kingdom", "United States", "Uruguay",
+        "Uzbekistan", "Vanuatu", "Venezuela, RB", "Viet Nam", "West Bank and Gaza",
+        "Yemen, Rep.", "Zambia", "Zimbabwe",
     ]
     default_countries = country.split(', ') if isinstance(country, str) else country or []
     _country_opts = sorted(
-        set(c[0] for c in data["countries"]) | set(_EXTRA_COUNTRIES) | set(default_countries))
+        set(c[0] for c in data["countries"]) | set(_ALL_COUNTRIES) | set(default_countries))
     country = st.multiselect("Country (multiple choice): *", _country_opts,
                              default=default_countries, key="bgi_country")
 
