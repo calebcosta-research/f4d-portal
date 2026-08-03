@@ -153,26 +153,38 @@ def get_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_
 def custom_indicators():
     st.success("### 6. Results Indicators")
 
+    # Create a session
+    session = create_session()
+
+    # Resolve the grant from the login first, and keep session state in sync.
+    trustfund = session.query(TrustFund).filter(TrustFund.name == current_username(),
+                                                TrustFund.team_id == current_team_id()
+                                                ).first()
+    if not trustfund:
+        st.error(f"No TrustFund found for this user - {current_username()}")
+        return
+    trustfund_id = trustfund.id
+    st.session_state.current_trustfund_id = trustfund_id
+
+    # Auto-resume the current reporting year if session state was reset (page
+    # reload, navigating via Home, or a mid-session error). Without this, a TTL
+    # whose report already exists is wrongly told to "fill Basic Grant
+    # Information first" here even though their data is saved.
+    if not st.session_state.current_fiscal_year_id:
+        _row = (session.query(GrantInfo.fiscal_year_id)
+                .filter_by(trustfund_id=trustfund_id, deleted=False)
+                .order_by(GrantInfo.fiscal_year_id.desc()).first())
+        if _row and _row[0]:
+            st.session_state.current_fiscal_year_id = _row[0]
     if not st.session_state.current_fiscal_year_id:
         st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
         return
 
-    # Create a session
-    session = create_session()
-
-    # Fetch existing indicators based on current trustfund_id and fiscal_year_id
+    # Fetch the existing report for the resolved grant + fiscal year.
     existing_grant_info = session.query(GrantInfo).filter_by(
-        trustfund_id=st.session_state.current_trustfund_id, fiscal_year_id=st.session_state.current_fiscal_year_id, deleted=False).first()
-
-    trustfund = session.query(TrustFund).filter(TrustFund.name == current_username(),
-                                                TrustFund.team_id == current_team_id()
-                                                ).first()
-
-    if trustfund:
-        trustfund_id = trustfund.id
-    else:
-        st.error(f"No TrustFund found for this user - {current_username()}")
-        return
+        trustfund_id=trustfund_id,
+        fiscal_year_id=st.session_state.current_fiscal_year_id,
+        deleted=False).first()
 
     # Fetch all mapping entries for the current trustfund_id
     mappings = session.query(TrustFundIndicatorMapping).filter(

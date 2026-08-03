@@ -27,6 +27,21 @@ def _as_number(v):
         return None
 
 
+def _as_date(v):
+    """Coerce a stored value to a date for st.date_input (which rejects arbitrary
+    strings and would otherwise crash the whole section -> logout). Returns None
+    (date_input then defaults to today) when the value is missing or unparseable."""
+    if isinstance(v, (datetime.date, datetime.datetime)):
+        return v
+    if isinstance(v, str) and v.strip():
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                return datetime.datetime.strptime(v.strip(), fmt).date()
+            except ValueError:
+                pass
+    return None
+
+
 def show_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_year_id):
     # Create a session
     session = create_session()
@@ -130,26 +145,38 @@ def get_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_y
 def deliverables():
     st.success("### 5. Outputs/deliverables")
 
+    # Create a session
+    session = create_session()
+
+    # Resolve the grant from the login first, and keep session state in sync.
+    trustfund = session.query(TrustFund).filter(TrustFund.name == current_username(),
+                                              TrustFund.team_id == current_team_id()
+                                              ).first()
+    if not trustfund:
+        st.error(f"No TrustFund found for this user - {current_username()}")
+        return
+    trustfund_id = trustfund.id
+    st.session_state.current_trustfund_id = trustfund_id
+
+    # Auto-resume the current reporting year if session state was reset (page
+    # reload, navigating via Home, or a mid-session error). Without this, a TTL
+    # whose report already exists is wrongly told to "fill Basic Grant
+    # Information first" here even though their data is saved.
+    if not st.session_state.current_fiscal_year_id:
+        _row = (session.query(GrantInfo.fiscal_year_id)
+                .filter_by(trustfund_id=trustfund_id, deleted=False)
+                .order_by(GrantInfo.fiscal_year_id.desc()).first())
+        if _row and _row[0]:
+            st.session_state.current_fiscal_year_id = _row[0]
     if not st.session_state.current_fiscal_year_id:
         st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
         return
 
-    # Create a session
-    session = create_session()
-
-    # Fetch existing indicators based on current grant ID
+    # Fetch the existing report for the resolved grant + fiscal year.
     existing_grant_info = session.query(GrantInfo).filter_by(
-        trustfund_id=st.session_state.current_trustfund_id, fiscal_year_id=st.session_state.current_fiscal_year_id, deleted=False).first()
-
-    trustfund = session.query(TrustFund).filter(TrustFund.name == current_username(),
-                                              TrustFund.team_id == current_team_id()
-                                              ).first()
-
-    if trustfund:
-        trustfund_id = trustfund.id
-    else:
-        st.error(f"No TrustFund found for this user - {current_username()}")
-        return
+        trustfund_id=trustfund_id,
+        fiscal_year_id=st.session_state.current_fiscal_year_id,
+        deleted=False).first()
 
     # Fetch all mapping entries for the current trustfund_id
     mappings = session.query(TrustFundIndicatorMapping).filter(
@@ -263,8 +290,8 @@ def deliverables():
                 # Display input fields with on_change callback
                 if indicator.unit_of_measurement == 'Date':
                     input_value = st.date_input(
-                        f"{indicator.indicator_prompt} {mandatory_char}", 
-                        value=input_value,  
+                        f"{indicator.indicator_prompt} {mandatory_char}",
+                        value=_as_date(input_value),
                         key=f"date_input_{mapping.id}")
 
                 elif indicator.unit_of_measurement == 'Number':
