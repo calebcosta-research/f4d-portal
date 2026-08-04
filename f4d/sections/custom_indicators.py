@@ -151,6 +151,23 @@ def get_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_
 
 
 def custom_indicators():
+    """Render the Results Indicators section. Never let an unexpected error crash
+    the script — on Posit Connect a crash drops the session and reads as a logout.
+    Streamlit's own control-flow signals (rerun/stop) are re-raised so buttons and
+    navigation keep working."""
+    try:
+        _custom_indicators_impl()
+    except Exception as exc:  # noqa: BLE001 - last-resort guard against logout
+        if type(exc).__name__ in ("RerunException", "StopException"):
+            raise
+        import traceback
+        print("custom_indicators render error:\n" + traceback.format_exc())
+        st.error("⚠️ Something went wrong displaying this section. Your saved data "
+                 "is safe. Please refresh the page and try again; if it keeps "
+                 "happening, contact the F4D team.")
+
+
+def _custom_indicators_impl():
     st.success("### 6. Results Indicators")
 
     # Create a session
@@ -350,8 +367,11 @@ def custom_indicators():
                 # Include a placeholder option for None
                 options = ["Outcome", "Intermediate Outcome", "Output"]
 
-                # Set the index to 0 (the placeholder) if level_of_result is None
-                default_index = None if level_of_result is None else options.index(level_of_result)
+                # Only preselect when the stored value is one of the options;
+                # otherwise leave it unselected. A bare options.index() here would
+                # raise ValueError for "" or any legacy value, crashing the whole
+                # Results section (which on Posit Connect reads as a logout).
+                default_index = options.index(level_of_result) if level_of_result in options else None
 
                 level_of_result = st.selectbox(
                     "Level of result",

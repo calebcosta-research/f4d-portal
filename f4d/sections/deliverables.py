@@ -143,6 +143,23 @@ def get_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_y
 
 
 def deliverables():
+    """Render the Outputs/Deliverables section. Never let an unexpected error crash
+    the script — on Posit Connect a crash drops the session and reads as a logout.
+    Streamlit's own control-flow signals (rerun/stop) are re-raised so buttons and
+    navigation keep working."""
+    try:
+        _deliverables_impl()
+    except Exception as exc:  # noqa: BLE001 - last-resort guard against logout
+        if type(exc).__name__ in ("RerunException", "StopException"):
+            raise
+        import traceback
+        print("deliverables render error:\n" + traceback.format_exc())
+        st.error("⚠️ Something went wrong displaying this section. Your saved data "
+                 "is safe. Please refresh the page and try again; if it keeps "
+                 "happening, contact the F4D team.")
+
+
+def _deliverables_impl():
     st.success("### 5. Outputs/deliverables")
 
     # Create a session
