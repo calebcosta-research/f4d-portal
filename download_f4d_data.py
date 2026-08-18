@@ -96,6 +96,44 @@ def main():
                 f"FROM {SCHEMA}.grant_info_long WHERE deleted=0")
     rows = cur.fetchall()
 
+    # Per-(grant, fiscal year) context so each Deliverables / Results row can
+    # carry the grant's inputs (country, region, pillars, etc.) as own columns.
+    CONTEXT = [
+        ("country", "Country"), ("region_id", "Region"),
+        ("p_code_instrument", "Product Line"), ("f4d_association", "F4D Association"),
+        ("pillars", "Pillars"), ("ccts", "Cross-Cutting Themes"),
+        ("strategic_objective", "Strategic Objective"),
+    ]
+    ctx_headers = [name for _, name in CONTEXT]
+    ctx_fields = {f for f, _ in CONTEXT}
+    context = {}
+    for _tid, _fid, _field, _value, _upd in rows:
+        if _field in ctx_fields:
+            _v = region.get(str(_value), _value) if _field == "region_id" else _value
+            context.setdefault((_tid, _fid), {})[_field] = "" if _v is None else _v
+
+    def prefix(tid, fid):
+        c = context.get((tid, fid), {})
+        return ([tf.get(tid, {}).get("name", tid), gname(tid),
+                 tf.get(tid, {}).get("ttl", ""), fy.get(fid, fid)]
+                + [c.get(f, "") for f, _ in CONTEXT])
+
+    # Per-grant progress for the current reporting year (the newest fiscal year):
+    # Not Started = no data for it, In Progress = saved but not submitted,
+    # Complete = a submission was recorded (report_submitted_at / report_status).
+    newest_fy = max(fy.keys()) if fy else None
+    prog = {}
+    for _tid, _fid, _field, _value, _upd in rows:
+        if _fid != newest_fy:
+            continue
+        p = prog.setdefault(_tid, {"last": None, "submitted_at": "", "complete": False})
+        if _upd and (p["last"] is None or _upd > p["last"]):
+            p["last"] = _upd
+        if _field == "report_submitted_at" and _value:
+            p["submitted_at"], p["complete"] = _value, True
+        elif _field == "report_status" and _value:
+            p["complete"] = True
+
     wb = Workbook()
     HEAD = PatternFill("solid", fgColor="1F4E79")
     hfont = Font(bold=True, color="FFFFFF")
@@ -112,16 +150,29 @@ def main():
 
     wb.remove(wb.active)  # drop default sheet
 
+    # Project Progress — one row per grant, at-a-glance status for the reporting year.
+    ws_prog = new_sheet("Project Progress",
+        ["Trust Fund #", "Grant Name", "TTL", "Status", "Last Updated", "Submitted At"])
+    for _tid, _meta in sorted(tf.items(), key=lambda kv: (kv[1].get("name") or "")):
+        p = prog.get(_tid)
+        if not p:
+            ws_prog.append([_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+                            "Not Started", "", ""])
+        else:
+            ws_prog.append([_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+                            "Complete" if p["complete"] else "In Progress",
+                            str(p["last"])[:19] if p["last"] else "", p["submitted_at"]])
+
     ws_info = new_sheet("Grant Info", [
         "Trust Fund #", "Grant Name", "TTL", "Fiscal Year", "Field", "Value"])
-    ws_del = new_sheet("Deliverables", [
-        "Trust Fund #", "Grant Name", "Fiscal Year", "Deliverable",
-        "Progress / Status", "Target #", "Number Completed", "Description",
-        "Next Steps", "Photos/Materials?"])
-    ws_res = new_sheet("Results Indicators", [
-        "Trust Fund #", "Grant Name", "Fiscal Year", "Indicator", "Unit",
-        "Progress Value", "Explanation", "Baseline", "Baseline Yr",
-        "Target", "Target Yr", "Level of Result", "Data Collection"])
+    ws_del = new_sheet("Deliverables",
+        ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
+        ["Deliverable", "Progress / Status", "Target #", "Number Completed",
+         "Description", "Next Steps", "Photos/Materials?"])
+    ws_res = new_sheet("Results Indicators",
+        ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
+        ["Indicator", "Unit", "Progress Value", "Explanation", "Baseline",
+         "Baseline Yr", "Target", "Target Yr", "Level of Result", "Data Collection"])
     ws_raw = new_sheet("All Data (raw)", [
         "Trust Fund #", "Grant Name", "Fiscal Year", "Field", "Value", "Last Updated"])
 
@@ -140,33 +191,35 @@ def main():
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                ws_del.append([tfnum, grant, year, iname(key, d),
-                               d.get("input_value", ""), d.get("progress", ""),
-                               d.get("deliverable_quantity", ""), d.get("description", ""),
-                               d.get("next_steps", ""), d.get("supporting_materials_url", "")])
+                ws_del.append(prefix(tid, fid) + [
+                    iname(key, d), d.get("input_value", ""), d.get("progress", ""),
+                    d.get("deliverable_quantity", ""), d.get("description", ""),
+                    d.get("next_steps", ""), d.get("supporting_materials_url", "")])
         elif field == "custom_indicators":
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                ws_res.append([tfnum, grant, year, iname(key, d), d.get("unit", ""),
-                               d.get("input_value", ""), d.get("progress", ""),
-                               d.get("baseline_value", ""), d.get("year_baseline", ""),
-                               d.get("target_value", ""), d.get("year_target", ""),
-                               d.get("level_of_result", ""), d.get("data_collection", "")])
+                ws_res.append(prefix(tid, fid) + [
+                    iname(key, d), d.get("unit", ""), d.get("input_value", ""),
+                    d.get("progress", ""), d.get("baseline_value", ""),
+                    d.get("year_baseline", ""), d.get("target_value", ""),
+                    d.get("year_target", ""), d.get("level_of_result", ""),
+                    d.get("data_collection", "")])
         elif field not in BLOB_FIELDS:
             # scalar / narrative fields -> readable Grant Info sheet
             shown = region.get(str(value), value) if field == "region_id" else value
             ws_info.append([tfnum, grant, tf.get(tid, {}).get("ttl", ""), year,
                             field, (str(shown) if shown is not None else "")[:32000]])
 
-    # sensible column widths
-    widths = {"Grant Info": [16, 40, 22, 10, 22, 60],
-              "Deliverables": [14, 34, 10, 34, 18, 9, 15, 45, 35, 14],
-              "Results Indicators": [14, 34, 10, 34, 10, 18, 40, 12, 10, 12, 10, 18, 22],
-              "All Data (raw)": [14, 36, 10, 24, 70, 18]}
-    for name, ws in [(s.title, s) for s in wb.worksheets]:
-        for i, w in enumerate(widths.get(name, []), start=1):
-            ws.column_dimensions[chr(64 + i)].width = w
+    # column widths by header name (robust to the added context columns)
+    WIDE = {"Grant Name": 34, "TTL": 20, "Strategic Objective": 48, "Description": 45,
+            "Next Steps": 34, "Explanation": 40, "Deliverable": 34, "Indicator": 34,
+            "Pillars": 30, "Cross-Cutting Themes": 28, "F4D Association": 28,
+            "Country": 18, "Region": 22, "Product Line": 14, "Data Collection": 22,
+            "Value": 60, "Field": 22, "Status": 13, "Last Updated": 20, "Submitted At": 20}
+    for ws in wb.worksheets:
+        for cell in ws[1]:
+            ws.column_dimensions[cell.column_letter].width = WIDE.get(cell.value, 14)
 
     ts = datetime.datetime.now().strftime("%Y-%m-%d")
     out = os.path.abspath(f"F4D_data_export_{ts}.xlsx")
@@ -176,7 +229,8 @@ def main():
 
     print("\nDONE. Excel file created:")
     print("   " + out)
-    print(f"\nSheets: Grant Info ({ws_info.max_row - 1} rows), "
+    print(f"\nSheets: Project Progress ({ws_prog.max_row - 1} grants), "
+          f"Grant Info ({ws_info.max_row - 1} rows), "
           f"Deliverables ({ws_del.max_row - 1}), "
           f"Results Indicators ({ws_res.max_row - 1}), "
           f"All Data raw ({ws_raw.max_row - 1}).")
