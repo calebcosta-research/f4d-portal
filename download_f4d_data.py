@@ -27,8 +27,8 @@ HOW TO RUN
        * whose computer this is -- type your name if you are listed in
          KNOWN_USERS below, otherwise just press Enter;
        * the database password (Caleb will give it to you), then Enter.
-  5. When it finishes it prints the name of the Excel file it created, in this
-     same folder. Open that file in Excel.
+  5. When it finishes it prints the full path of the Excel file it created --
+     normally in the folder you ran it from. Open that file in Excel.
 
 If anything goes wrong the window stays open and explains what happened, and
 writes the detail to download_error.txt next to this script -- send that file
@@ -77,6 +77,11 @@ KNOWN_USERS = {
     "Sara": r"C:\Users\wb293537\OneDrive - WBG\Desktop\F4D M&E Portfolio Data_MASTER.csv",
 }
 
+#  Where to put the finished Excel file. Leave it as "" to use the folder you
+#  run the script from; if that folder can't be written to, the script tries
+#  your Desktop and then the Windows temp folder, and prints where it landed.
+OUTPUT_FOLDER = r""
+
 #  Which portfolio columns to add to the export. Empty list = all of them.
 #  To keep the sheets narrow, list the exact headings you want instead, e.g.
 #      PORTFOLIO_COLUMNS = ["Window Name", "Donor", "Grant status", "Closing Date"]
@@ -94,6 +99,7 @@ import datetime
 import getpass
 import glob
 import os
+import tempfile
 import traceback
 
 # Imported leniently so a missing library is reported by run() below, with the
@@ -288,6 +294,56 @@ def clean_cell(value):
     """Trimmed, Excel-safe text for one portfolio cell."""
     text = "" if value is None else str(value).strip()
     return text.translate(ILLEGAL_IN_EXCEL)[:32000]
+
+
+def unique_path(path):
+    """The path itself, or the same name with (2), (3) ... so that an export
+    never overwrites one already sitting in the folder."""
+    if not os.path.exists(path):
+        return path
+    stem, ext = os.path.splitext(path)
+    for n in range(2, 1000):
+        candidate = f"{stem} ({n}){ext}"
+        if not os.path.exists(candidate):
+            return candidate
+    return path
+
+
+def save_workbook(wb):
+    """Save the finished workbook, and return (path, folders that refused it).
+
+    A finished export is too expensive to throw away because one folder is
+    read-only or the file is open in Excel, so several locations are tried in
+    turn. The file name carries the time as well as the date, so a second run
+    on the same day never collides with a copy already open.
+    """
+    name = "F4D_data_export_" + datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S") + ".xlsx"
+    home = os.path.expanduser("~")
+    wanted = (os.environ.get("output_folder") or OUTPUT_FOLDER or "").strip().strip('"')
+    candidates = [
+        os.path.expanduser(wanted) if wanted else "",
+        os.getcwd(),
+        os.path.dirname(os.path.abspath(__file__)),
+        os.path.join(home, "Desktop"),
+        os.path.join(home, "OneDrive - WBG", "Desktop"),
+        tempfile.gettempdir(),
+    ]
+
+    refused, tried = [], set()
+    for folder in candidates:
+        if not folder or folder in tried or not os.path.isdir(folder):
+            continue
+        tried.add(folder)
+        path = unique_path(os.path.join(folder, name))
+        try:
+            wb.save(path)
+            return path, refused
+        except OSError as error:
+            refused.append((folder, error))
+
+    detail = "; ".join(f"{folder} ({error.__class__.__name__})"
+                       for folder, error in refused) or "no writable folder found"
+    raise PermissionError("Could not save the Excel file anywhere. Tried: " + detail)
 
 
 def as_text(value):
@@ -717,14 +773,18 @@ def main():
         for cell in ws[1]:
             ws.column_dimensions[cell.column_letter].width = WIDE.get(cell.value, 14)
 
-    ts = datetime.datetime.now().strftime("%Y-%m-%d")
-    out = os.path.abspath(f"F4D_data_export_{ts}.xlsx")
-    wb.save(out)
+    # Finished with the database before writing anything to disk.
     cur.close()
     conn.close()
 
-    print("\nDONE. Excel file created:")
+    out, refused = save_workbook(wb)
+
+    print("")
+    print("DONE. Excel file created:")
     print("   " + out)
+    for folder, error in refused:
+        print(f"   (couldn't write to {folder} -- {error.__class__.__name__}; "
+              "if the file was open in Excel, closing it avoids this)")
     print(f"\nSheets: Project Progress ({ws_prog.max_row - 1} grants), "
           f"Grant Info ({ws_info.max_row - 1} rows), "
           f"Deliverables ({ws_del.max_row - 1}), "
@@ -758,7 +818,7 @@ PLAIN_ENGLISH = [
      "Could not reach the database server. This usually means the computer "
      "is not on the World Bank network -- connect to the VDI or the VPN and "
      "try again."),
-    (("permission", "denied", "not have permission"),
+    (("the select permission", "permission was denied", "not have permission"),
      "The database connected but refused to read the data. Send this file to "
      "Caleb; the account may need to be granted access."),
 ]
@@ -766,6 +826,13 @@ PLAIN_ENGLISH = [
 
 def explain(error):
     """One sentence a non-technical reader can act on, for common failures."""
+    if isinstance(error, PermissionError):
+        # Checked by type first: "permission denied" from Windows used to be
+        # mistaken for the database refusing the account.
+        return ("Windows would not let the script save the Excel file. If a "
+                "copy is already open in Excel, close it and run again. "
+                "Otherwise set OUTPUT_FOLDER near the top of the script to a "
+                "folder you can write to, such as your Desktop.")
     text = f"{type(error).__name__}: {error}".lower()
     for needles, message in PLAIN_ENGLISH:
         if any(n in text for n in needles):
