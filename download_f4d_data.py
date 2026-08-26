@@ -73,9 +73,19 @@ PORTFOLIO_DATA_PATH = r""
 #  above is empty, the script asks whose computer it is running on and uses the
 #  matching path from here. To add someone, copy a line and change the name and
 #  the path (keep the r before the quotes).
+#  A person can have more than one copy; they are tried in order and the first
+#  one that exists is used.
 KNOWN_USERS = {
-    "Sara": r"C:\Users\wb293537\OneDrive - WBG\Desktop\F4D M&E Portfolio Data_MASTER.csv",
+    "Sara": [
+        r"C:\Users\wb293537\WBG\EFIOS Files - F4D\7. Monitoring & Evaluation\F4D M&E Portfolio Data_MASTER.xlsx",
+        r"C:\Users\wb293537\OneDrive - WBG\Desktop\F4D M&E Portfolio Data_MASTER.csv",
+    ],
 }
+
+#  Which tab to read when the portfolio file is an Excel workbook. If a tab of
+#  this name isn't there, the first tab is used and the script says so.
+#  Ignored for .csv files, which have only one sheet.
+PORTFOLIO_SHEET = "Project details"
 
 #  Where to put the finished Excel file. Leave it as "" to use the folder you
 #  run the script from; if that folder can't be written to, the script tries
@@ -232,12 +242,15 @@ def ask_known_user():
         return None
     if not chosen:
         return None
-    path = KNOWN_USERS[chosen]
-    if os.path.isfile(path):
-        return path
-    print(f"   ! {chosen}'s saved portfolio file isn't there any more:")
-    print(f"     {path}")
-    print("     Looking for it in the usual folders instead.")
+    saved = KNOWN_USERS[chosen]
+    paths = [saved] if isinstance(saved, str) else list(saved)
+    for path in paths:
+        if os.path.isfile(path):
+            return path
+    print(f"   ! None of {chosen}'s saved portfolio files are there:")
+    for path in paths:
+        print(f"     {path}")
+    print("     Looking in the usual folders instead.")
     return None
 
 
@@ -375,11 +388,55 @@ def add(worksheet, values):
     worksheet.append([cell_for_excel(v) for v in values])
 
 
+def has_join_column(worksheet):
+    """True if this tab's opening rows carry the trust fund or P-code heading."""
+    for row in worksheet.iter_rows(min_row=1, max_row=15, values_only=True):
+        for value in row:
+            if isinstance(value, str) and value.strip() in (
+                    PORTFOLIO_TF_COLUMN, PORTFOLIO_PCODE_COLUMN):
+                return True
+    return False
+
+
+def pick_sheet(book):
+    """The tab to read: PORTFOLIO_SHEET, then whichever tab has the join column.
+
+    The name is matched ignoring case and surrounding spaces, so "Project
+    Details" finds "Project details". If the tab has been renamed outright, any
+    tab carrying the trust fund column is used instead -- reading the wrong tab
+    silently would just produce an empty merge.
+    """
+    wanted = (PORTFOLIO_SHEET or "").strip().lower()
+    if wanted:
+        for title in book.sheetnames:
+            if title.strip().lower() == wanted:
+                return book[title]
+
+    for title in book.sheetnames:
+        if has_join_column(book[title]):
+            if wanted:
+                print(f"   ! No tab called {PORTFOLIO_SHEET!r} in this workbook; "
+                      f"using {title!r}, which has the {PORTFOLIO_TF_COLUMN!r} column.")
+            return book[title]
+
+    first = book[book.sheetnames[0]]
+    print(f"   ! No tab in this workbook has a {PORTFOLIO_TF_COLUMN!r} column. "
+          f"Reading {first.title!r}.")
+    print("     Tabs in the file: " + ", ".join(book.sheetnames))
+    return first
+
+
 def read_table(path):
-    """Read a .csv/.xlsx portfolio file into rows of text (first row = headings)."""
+    """Read a .csv/.xlsx portfolio file into rows of text.
+
+    For a workbook the PORTFOLIO_SHEET tab is used; if there is no tab by that
+    name the first one is read instead and the available tabs are listed, so a
+    renamed tab is obvious rather than silently giving an empty result.
+    """
     if path.lower().endswith((".xlsx", ".xlsm")):
         from openpyxl import load_workbook
-        ws = load_workbook(path, read_only=True, data_only=True).active
+        book = load_workbook(path, read_only=True, data_only=True)
+        ws = pick_sheet(book)
         return [[clean_cell(c) for c in row] for row in ws.iter_rows(values_only=True)]
     # Excel usually writes cp1252 here; utf-8 first in case it was saved that way.
     for encoding in ("utf-8-sig", "cp1252", "latin-1"):
@@ -408,7 +465,18 @@ def load_portfolio():
         print(f"   ! Portfolio file has no rows: {path}")
         return path, [], {}, {}
 
-    raw_head, body = table[0], table[1:]
+    # The headings are usually the first row, but a workbook tab often opens
+    # with a title or a blank line or two. Take the first row that actually
+    # carries one of the join columns.
+    header_row = 0
+    for i, row in enumerate(table[:15]):
+        if any(c in (PORTFOLIO_TF_COLUMN, PORTFOLIO_PCODE_COLUMN) for c in row):
+            header_row = i
+            break
+    if header_row:
+        print(f"   (headings found on row {header_row + 1})")
+
+    raw_head, body = table[header_row], table[header_row + 1:]
     body = [r for r in body if any(c for c in r)]
 
     # Keep columns that hold something. Unheaded columns keep their Excel letter.
@@ -483,7 +551,11 @@ def main():
     pf_path, pf_headings, pf_by_tf, pf_by_pcode = load_portfolio()
     if pf_path and pf_headings:
         print(f"Portfolio data: {pf_path}")
-        print(f"   {len(pf_headings)} columns, {len(pf_by_tf)} trust fund numbers.")
+        where = (f", tab {PORTFOLIO_SHEET!r}"
+                 if pf_path.lower().endswith((".xlsx", ".xlsm")) and PORTFOLIO_SHEET
+                 else "")
+        print(f"   {len(pf_headings)} columns, {len(pf_by_tf)} trust fund "
+              f"numbers{where}.")
     elif not pf_path:
         print("Portfolio data: not found — the export will run without those columns.")
         print("   Set PORTFOLIO_DATA_PATH at the top of this file to add them.")
