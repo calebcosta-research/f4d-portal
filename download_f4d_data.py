@@ -2,12 +2,12 @@
 
 Read-only. Connects to the WB SQL Server, reads every grant's submissions, and
 writes a single Excel file with clean, decoded sheets (Grant Info, Deliverables,
-Results Indicators, Lending Operations, Collaboration, and a complete Raw
-sheet). Nothing is written to the database.
+Results Indicators, Strategic Objective & Progress, Lending Operations,
+Collaboration, and a complete Raw sheet). Nothing is written to the database.
 
-Each grant's lending operations and collaborations also travel as columns on
-the Deliverables and Results Indicators sheets, so a single row carries the
-whole picture for pivot tables.
+Each grant's strategic objective, lending operations and collaborations also
+travel as columns on the Deliverables and Results Indicators sheets, so a
+single row carries the whole picture for pivot tables.
 
 The M&E portfolio spreadsheet (window, donor, dates, grant status, pillars,
 objective, ...) is merged onto the Deliverables and Results Indicators sheets,
@@ -156,6 +156,23 @@ def decode(value):
 # cpf_1, collaboration_1, ... — each holding a str(dict). "collaborations"
 # (no underscore) is the grant's single Yes/No answer, not an entry.
 ENTRY_PREFIXES = ("operation_", "cpf_", "collaboration_")
+
+# The Strategic Objective & Progress section, in the order the TTL fills it in.
+# Unlike the sections above, these are plain scalar fields -- one set per grant
+# and fiscal year -- so they need no numbered-entry handling.
+STRATEGIC_FIELDS = [
+    ("challenges", "Challenges the Grant Addresses"),
+    ("strategic_objective", "Strategic Objective"),
+    ("overall_progress", "Overall Progress Since Inception"),
+    ("implementation_challenges", "Implementation Challenges"),
+    ("public_communication_external", "Public Communication (External)"),
+    ("public_communication_internal", "Public Communication (Internal)"),
+]
+# "Strategic Objective" is already carried on every Deliverables / Results row
+# as a grant-context column, so it is left out of the columns added there --
+# repeating it would put two identically named columns on one sheet.
+STRATEGIC_HEADERS = [name for field, name in STRATEGIC_FIELDS
+                     if name != "Strategic Objective"]
 
 # Columns the flattened lending-operations and collaboration info adds to the
 # Deliverables and Results Indicators sheets, one grant-year per row.
@@ -594,6 +611,7 @@ def main():
              "Cross-Cutting Themes", "Strategic Objective", "Deliverable",
              "Indicator", "Unit", "Description", "Next Steps"}
     taken.update(SUMMARY_HEADERS)
+    taken.update(name for _, name in STRATEGIC_FIELDS)
     pf_out_headings = [f"{h} (portfolio)" if h in taken else h for h in pf_headings]
     pf_blank = [""] * len(pf_headings)
     pf_cache = {}
@@ -636,11 +654,34 @@ def main():
             _v = region.get(str(_value), _value) if _field == "region_id" else _value
             context.setdefault((_tid, _fid), {})[_field] = "" if _v is None else _v
 
-    def prefix(tid, fid):
+    def prefix(tid, fid, skip=()):
+        """The leading grant columns. `skip` drops context columns a sheet
+        already shows in its own right (the Strategic Objective tab lists the
+        objective as a section field, so it doesn't want the context copy)."""
         c = context.get((tid, fid), {})
         return ([tf.get(tid, {}).get("name", tid), gname(tid),
                  tf.get(tid, {}).get("ttl", ""), fy.get(fid, fid)]
-                + [c.get(f, "") for f, _ in CONTEXT])
+                + [c.get(f, "") for f, name in CONTEXT if name not in skip])
+
+    # Every grant-year that reported anything, and the Strategic Objective &
+    # Progress answers for it.
+    grant_years = {(r[0], r[1]) for r in rows}
+    strategic = {}
+    _strategic_fields = {f for f, _ in STRATEGIC_FIELDS}
+    for _tid, _fid, _field, _value, _upd in rows:
+        if _field in _strategic_fields:
+            strategic.setdefault((_tid, _fid), {})[_field] = _value
+
+    def strategic_row(tid, fid):
+        """The section's answers for one grant-year, in STRATEGIC_FIELDS order."""
+        got = strategic.get((tid, fid), {})
+        return [got.get(f, "") for f, _ in STRATEGIC_FIELDS]
+
+    def strategic_summary(tid, fid):
+        """The same, minus the objective already carried as a context column."""
+        got = strategic.get((tid, fid), {})
+        return [got.get(f, "") for f, name in STRATEGIC_FIELDS
+                if name != "Strategic Objective"]
 
     # Lending operations, CPFs and collaborations, grouped per (grant, year)
     # and kept in the order the TTL entered them (operation_1, operation_2, ...).
@@ -736,12 +777,20 @@ def main():
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
         ["Deliverable", "Progress / Status", "Target #", "Number Completed",
          "Description", "Next Steps", "Photos/Materials?"] +
-        SUMMARY_HEADERS + pf_out_headings)
+        STRATEGIC_HEADERS + SUMMARY_HEADERS + pf_out_headings)
     ws_res = new_sheet("Results Indicators",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
         ["Indicator", "Unit", "Progress Value", "Explanation", "Baseline",
          "Baseline Yr", "Target", "Target Yr", "Level of Result",
-         "Data Collection"] + SUMMARY_HEADERS + pf_out_headings)
+         "Data Collection"] + STRATEGIC_HEADERS + SUMMARY_HEADERS +
+        pf_out_headings)
+
+    # One row per grant and year, blank where the section was left unfilled,
+    # so gaps are as visible as answers.
+    strat_ctx_headers = [h for h in ctx_headers if h != "Strategic Objective"]
+    ws_strat = new_sheet("Strategic Objective & Progress",
+        ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + strat_ctx_headers +
+        [name for _, name in STRATEGIC_FIELDS])
 
     # One row per lending operation, then per CPF, for each grant and year.
     ws_ops = new_sheet("Lending Operations",
@@ -778,7 +827,8 @@ def main():
                     iname(key, d), d.get("input_value", ""), d.get("progress", ""),
                     d.get("deliverable_quantity", ""), d.get("description", ""),
                     d.get("next_steps", ""), d.get("supporting_materials_url", "")]
-                    + summary(tid, fid) + portfolio(tid))
+                    + strategic_summary(tid, fid) + summary(tid, fid)
+                    + portfolio(tid))
         elif field == "custom_indicators":
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
@@ -788,7 +838,8 @@ def main():
                     d.get("progress", ""), d.get("baseline_value", ""),
                     d.get("year_baseline", ""), d.get("target_value", ""),
                     d.get("year_target", ""), d.get("level_of_result", ""),
-                    d.get("data_collection", "")] + summary(tid, fid) + portfolio(tid))
+                    d.get("data_collection", "")] + strategic_summary(tid, fid)
+                    + summary(tid, fid) + portfolio(tid))
         elif field not in BLOB_FIELDS and not field.startswith(ENTRY_PREFIXES):
             # scalar / narrative fields -> readable Grant Info sheet. The
             # numbered entries are skipped here; they have their own sheets
@@ -797,9 +848,13 @@ def main():
             add(ws_info, [tfnum, grant, tf.get(tid, {}).get("ttl", ""), year,
                           field, shown])
 
-    # Lending Operations / Collaboration rows, grant by grant.
+    # Strategic Objective / Lending Operations / Collaboration rows.
     def sort_key(key):
         return (str(gname(key[0])), str(fy.get(key[1], "")))
+
+    for tid, fid in sorted(grant_years, key=sort_key):
+        add(ws_strat, prefix(tid, fid, skip={"Strategic Objective"})
+                      + strategic_row(tid, fid))
 
     for tid, fid in sorted(set(ops) | set(cpfs), key=sort_key):
         for n, o in enumerate(ops.get((tid, fid), []), start=1):
@@ -840,7 +895,12 @@ def main():
             "Informed by F4D (US$m)": 16, "Lending Operations (#)": 12,
             "Operation P Numbers": 22, "Operation Instruments": 22,
             "Operation Approval FYs": 16, "CPFs (#)": 10, "CPF Countries": 20,
-            "CPF Years": 12, "Collaborations (#)": 12}
+            "CPF Years": 12, "Collaborations (#)": 12,
+            "Challenges the Grant Addresses": 50,
+            "Overall Progress Since Inception": 60,
+            "Implementation Challenges": 50,
+            "Public Communication (External)": 45,
+            "Public Communication (Internal)": 45}
     for ws in wb.worksheets:
         for cell in ws[1]:
             ws.column_dimensions[cell.column_letter].width = WIDE.get(cell.value, 14)
@@ -861,6 +921,7 @@ def main():
           f"Grant Info ({ws_info.max_row - 1} rows), "
           f"Deliverables ({ws_del.max_row - 1}), "
           f"Results Indicators ({ws_res.max_row - 1}), "
+          f"Strategic Objective ({ws_strat.max_row - 1}), "
           f"Lending Operations ({ws_ops.max_row - 1}), "
           f"Collaboration ({ws_collab.max_row - 1}), "
           f"All Data raw ({ws_raw.max_row - 1}).")
