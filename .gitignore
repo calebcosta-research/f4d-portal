@@ -21,3 +21,5 @@ f4d.db
 exports/
 *.zip
 applog.txt
+download_error.txt
+F4D_data_export_*.xlsx

@@ -30,6 +30,10 @@ HOW TO RUN
   5. When it finishes it prints the name of the Excel file it created, in this
      same folder. Open that file in Excel.
 
+If anything goes wrong the window stays open and explains what happened, and
+writes the detail to download_error.txt next to this script -- send that file
+on and it will say exactly what failed.
+
 The portfolio spreadsheet is found in one of three ways, in this order:
 PORTFOLIO_DATA_PATH below if you filled it in, then the saved location for
 whoever answers the "whose computer is this" question, then any portfolio file
@@ -90,17 +94,19 @@ import datetime
 import getpass
 import glob
 import os
-import sys
+import traceback
 
+# Imported leniently so a missing library is reported by run() below, with the
+# window held open, instead of vanishing when the console closes.
 try:
     import pytds
 except ImportError:
-    sys.exit("Missing the database library. Run this once:  pip install python-tds openpyxl")
+    pytds = None
 try:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
 except ImportError:
-    sys.exit("Missing openpyxl. Run this once:  pip install python-tds openpyxl")
+    Workbook = None
 
 SCHEMA = os.environ.get("db_schema", "f4d")
 
@@ -156,7 +162,7 @@ def entry_number(field):
 
 def joined(entries, key):
     """Every non-empty value of one key across entries, in a single cell."""
-    values = [str(e.get(key, "") or "").strip() for e in entries]
+    values = [as_text(e.get(key, "")).strip() for e in entries]
     return " | ".join(v for v in values if v)[:32000]
 
 
@@ -284,6 +290,35 @@ def clean_cell(value):
     return text.translate(ILLEGAL_IN_EXCEL)[:32000]
 
 
+def as_text(value):
+    """Readable text for one stored value.
+
+    Multi-select answers are kept as real Python lists inside the blob fields
+    (a CPF's country is one), and openpyxl refuses a list outright. Render
+    those as "Colombia, Peru" rather than "['Colombia', 'Peru']".
+    """
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(str(v).strip() for v in value
+                          if v is not None and str(v).strip())
+    return "" if value is None else str(value)
+
+
+def cell_for_excel(value):
+    """One cell openpyxl will accept: numbers and dates as they are, everything
+    else as text with lists flattened and control characters removed. A list,
+    or a single stray character pasted into a text box, used to abort the
+    whole export."""
+    if value is None or isinstance(value, (int, float, bool,
+                                           datetime.datetime, datetime.date)):
+        return value
+    return as_text(value).translate(ILLEGAL_IN_EXCEL)[:32000]
+
+
+def add(worksheet, values):
+    """Append one row, cell by cell, through cell_for_excel()."""
+    worksheet.append([cell_for_excel(v) for v in values])
+
+
 def read_table(path):
     """Read a .csv/.xlsx portfolio file into rows of text (first row = headings)."""
     if path.lower().endswith((".xlsx", ".xlsm")):
@@ -384,6 +419,11 @@ def portfolio_keys(meta):
 
 
 def main():
+    if pytds is None or Workbook is None:
+        raise RuntimeError(
+            "A library this script needs isn't installed. Run this one line, "
+            "then try again:" + os.linesep + "    pip install python-tds openpyxl")
+
     pf_path, pf_headings, pf_by_tf, pf_by_pcode = load_portfolio()
     if pf_path and pf_headings:
         print(f"Portfolio data: {pf_path}")
@@ -555,10 +595,10 @@ def main():
     for _tid, _meta in sorted(tf.items(), key=lambda kv: (kv[1].get("name") or "")):
         p = prog.get(_tid)
         if not p:
-            ws_prog.append([_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+            add(ws_prog, [_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
                             "Not Started", "", ""])
         else:
-            ws_prog.append([_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+            add(ws_prog, [_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
                             "Complete" if p["complete"] else "In Progress",
                             str(p["last"])[:19] if p["last"] else "", p["submitted_at"]])
 
@@ -599,14 +639,14 @@ def main():
         year = fy.get(fid, fid)
 
         # Raw catch-all (everything, unmodified)
-        ws_raw.append([tfnum, grant, year, field, (value or "")[:32000],
-                       str(updated)[:19] if updated else ""])
+        add(ws_raw, [tfnum, grant, year, field, value,
+                     str(updated)[:19] if updated else ""])
 
         if field == "deliverables":
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                ws_del.append(prefix(tid, fid) + [
+                add(ws_del, prefix(tid, fid) + [
                     iname(key, d), d.get("input_value", ""), d.get("progress", ""),
                     d.get("deliverable_quantity", ""), d.get("description", ""),
                     d.get("next_steps", ""), d.get("supporting_materials_url", "")]
@@ -615,7 +655,7 @@ def main():
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                ws_res.append(prefix(tid, fid) + [
+                add(ws_res, prefix(tid, fid) + [
                     iname(key, d), d.get("unit", ""), d.get("input_value", ""),
                     d.get("progress", ""), d.get("baseline_value", ""),
                     d.get("year_baseline", ""), d.get("target_value", ""),
@@ -626,8 +666,8 @@ def main():
             # numbered entries are skipped here; they have their own sheets
             # (and are still in All Data raw, exactly as stored).
             shown = region.get(str(value), value) if field == "region_id" else value
-            ws_info.append([tfnum, grant, tf.get(tid, {}).get("ttl", ""), year,
-                            field, (str(shown) if shown is not None else "")[:32000]])
+            add(ws_info, [tfnum, grant, tf.get(tid, {}).get("ttl", ""), year,
+                          field, shown])
 
     # Lending Operations / Collaboration rows, grant by grant.
     def sort_key(key):
@@ -635,14 +675,14 @@ def main():
 
     for tid, fid in sorted(set(ops) | set(cpfs), key=sort_key):
         for n, o in enumerate(ops.get((tid, fid), []), start=1):
-            ws_ops.append(prefix(tid, fid) + [
+            add(ws_ops, prefix(tid, fid) + [
                 "Lending Operation", n, o.get("informed_operation", ""),
                 o.get("p_number", ""), o.get("p_code_instrument", ""),
                 o.get("p_code_instrument_description", ""), o.get("approval_fy", ""),
                 o.get("operation_name", ""), number(o.get("total_commitment")),
                 number(o.get("informed_by_f4d")), "", "", o.get("evidence", "")])
         for n, c in enumerate(cpfs.get((tid, fid), []), start=1):
-            ws_ops.append(prefix(tid, fid) + [
+            add(ws_ops, prefix(tid, fid) + [
                 "CPF", n, c.get("informed_cpf", ""), "", "", "", "", "", "", "",
                 c.get("country", ""), c.get("year", ""), c.get("evidence", "")])
 
@@ -650,9 +690,9 @@ def main():
         answer = collab_answer.get((tid, fid), "")
         entries = collabs.get((tid, fid), [])
         if not entries:
-            ws_collab.append(prefix(tid, fid) + [answer, "", "", "", "", ""])
+            add(ws_collab, prefix(tid, fid) + [answer, "", "", "", "", ""])
         for n, b in enumerate(entries, start=1):
-            ws_collab.append(prefix(tid, fid) + [
+            add(ws_collab, prefix(tid, fid) + [
                 answer, n, b.get("type", ""), b.get("partner_detail", ""),
                 b.get("describe", ""), b.get("lessons_learned", "")])
 
@@ -704,5 +744,65 @@ def main():
     print("Open that file in Excel. (Read-only — nothing in the database changed.)")
 
 
+# --------------------------------------------------------------------------- #
+# Running it: show what went wrong and wait, so a double-clicked window that    #
+# fails stays on screen long enough to read.                                    #
+# --------------------------------------------------------------------------- #
+PLAIN_ENGLISH = [
+    (("login failed", "not associated with a trusted"),
+     "The database did not accept that username and password. Check the "
+     "password (ask Caleb) and try again -- it is typed blind, so nothing "
+     "appears as you type."),
+    (("timed out", "timeout", "getaddrinfo", "unreachable", "refused",
+      "no route", "failed to connect", "cannot connect"),
+     "Could not reach the database server. This usually means the computer "
+     "is not on the World Bank network -- connect to the VDI or the VPN and "
+     "try again."),
+    (("permission", "denied", "not have permission"),
+     "The database connected but refused to read the data. Send this file to "
+     "Caleb; the account may need to be granted access."),
+]
+
+
+def explain(error):
+    """One sentence a non-technical reader can act on, for common failures."""
+    text = f"{type(error).__name__}: {error}".lower()
+    for needles, message in PLAIN_ENGLISH:
+        if any(n in text for n in needles):
+            return message
+    return str(error) or type(error).__name__
+
+
+def run():
+    log = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "download_error.txt")
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(os.linesep + "Stopped.")
+    except Exception as error:  # noqa: BLE001 - the window must not just close
+        print("")
+        print("-" * 70)
+        print("The download did not finish.")
+        print("")
+        print("   " + explain(error))
+        print("")
+        print("-" * 70)
+        print("Technical detail (send download_error.txt to Caleb):")
+        print("")
+        detail = traceback.format_exc()
+        print(detail)  # stdout, so it stays in order with everything above
+        try:
+            with open(log, "w", encoding="utf-8") as fh:
+                fh.write(explain(error) + os.linesep + os.linesep + detail)
+            print("Saved to: " + log)
+        except OSError:
+            pass
+    try:
+        input(os.linesep + "Press Enter to close this window ...")
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+
 if __name__ == "__main__":
-    main()
+    run()
