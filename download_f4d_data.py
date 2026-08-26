@@ -11,8 +11,9 @@ single row carries the whole picture for pivot tables.
 
 The M&E portfolio spreadsheet (window, donor, dates, grant status, pillars,
 objective, ...) is merged onto the Deliverables and Results Indicators sheets,
-matched to each portal entry by trust fund number. Point PORTFOLIO_DATA_PATH
-(the first setting below) at your copy of that file.
+matched to each portal entry by trust fund number, and onto the Strategic
+Objective, Lending Operations and Collaboration sheets the same way. Point
+PORTFOLIO_DATA_PATH (the first setting below) at your copy of that file.
 
 Uses python-tds (``import pytds``) + openpyxl — the pure-Python tools that work on
 the locked-down VDI and on a normal machine after a one-time
@@ -173,6 +174,36 @@ STRATEGIC_FIELDS = [
 # repeating it would put two identically named columns on one sheet.
 STRATEGIC_HEADERS = [name for field, name in STRATEGIC_FIELDS
                      if name != "Strategic Objective"]
+
+# The columns each sheet contributes itself. Kept here rather than inline so
+# the portfolio merge can see every name already in use and rename its own
+# clashes -- the portfolio file has "Instrument" and "Approval FY" columns of
+# its own, which would otherwise collide with the lending operation ones.
+# Per-(grant, fiscal year) context so every sheet's rows can carry the grant's
+# own inputs (country, region, pillars, ...) as columns of their own.
+CONTEXT = [
+    ("country", "Country"), ("region_id", "Region"),
+    ("p_code_instrument", "Product Line"), ("f4d_association", "F4D Association"),
+    ("pillars", "Pillars"), ("ccts", "Cross-Cutting Themes"),
+    ("strategic_objective", "Strategic Objective"),
+]
+ctx_headers = [name for _, name in CONTEXT]
+ctx_fields = {f for f, _ in CONTEXT}
+
+DELIVERABLE_HEADERS = [
+    "Deliverable", "Progress / Status", "Target #", "Number Completed",
+    "Description", "Next Steps", "Photos/Materials?"]
+RESULT_HEADERS = [
+    "Indicator", "Unit", "Progress Value", "Explanation", "Baseline",
+    "Baseline Yr", "Target", "Target Yr", "Level of Result", "Data Collection"]
+OPERATION_HEADERS = [
+    "Entry", "Entry #", "Informed?", "P Number", "Instrument",
+    "Instrument (Other)", "Approval FY", "Operation Name",
+    "Total Commitment (US$m)", "Informed by F4D (US$m)",
+    "CPF Country", "CPF Year", "Evidence"]
+COLLABORATION_HEADERS = [
+    "Collaboration Reported?", "Entry #", "Type",
+    "Team(s) / Organization(s)", "Description", "Lessons Learned"]
 
 # Columns the flattened lending-operations and collaboration info adds to the
 # Deliverables and Results Indicators sheets, one grant-year per row.
@@ -606,12 +637,12 @@ def main():
 
     # Portfolio columns for a grant: matched on trust fund number, then P-code.
     # Headings that clash with a column the export already has are suffixed.
-    taken = {"Trust Fund #", "Grant Name", "TTL", "Fiscal Year", "Country",
-             "Region", "Product Line", "F4D Association", "Pillars",
-             "Cross-Cutting Themes", "Strategic Objective", "Deliverable",
-             "Indicator", "Unit", "Description", "Next Steps"}
-    taken.update(SUMMARY_HEADERS)
-    taken.update(name for _, name in STRATEGIC_FIELDS)
+    taken = {"Trust Fund #", "Grant Name", "TTL", "Fiscal Year"}
+    taken.update(ctx_headers)
+    for block in (DELIVERABLE_HEADERS, RESULT_HEADERS, OPERATION_HEADERS,
+                  COLLABORATION_HEADERS, SUMMARY_HEADERS, STRATEGIC_HEADERS,
+                  [name for _, name in STRATEGIC_FIELDS]):
+        taken.update(block)
     pf_out_headings = [f"{h} (portfolio)" if h in taken else h for h in pf_headings]
     pf_blank = [""] * len(pf_headings)
     pf_cache = {}
@@ -638,16 +669,6 @@ def main():
                 f"FROM {SCHEMA}.grant_info_long WHERE deleted=0")
     rows = cur.fetchall()
 
-    # Per-(grant, fiscal year) context so each Deliverables / Results row can
-    # carry the grant's inputs (country, region, pillars, etc.) as own columns.
-    CONTEXT = [
-        ("country", "Country"), ("region_id", "Region"),
-        ("p_code_instrument", "Product Line"), ("f4d_association", "F4D Association"),
-        ("pillars", "Pillars"), ("ccts", "Cross-Cutting Themes"),
-        ("strategic_objective", "Strategic Objective"),
-    ]
-    ctx_headers = [name for _, name in CONTEXT]
-    ctx_fields = {f for f, _ in CONTEXT}
     context = {}
     for _tid, _fid, _field, _value, _upd in rows:
         if _field in ctx_fields:
@@ -775,36 +796,28 @@ def main():
         "Trust Fund #", "Grant Name", "TTL", "Fiscal Year", "Field", "Value"])
     ws_del = new_sheet("Deliverables",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
-        ["Deliverable", "Progress / Status", "Target #", "Number Completed",
-         "Description", "Next Steps", "Photos/Materials?"] +
-        STRATEGIC_HEADERS + SUMMARY_HEADERS + pf_out_headings)
+        DELIVERABLE_HEADERS + STRATEGIC_HEADERS + SUMMARY_HEADERS +
+        pf_out_headings)
     ws_res = new_sheet("Results Indicators",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
-        ["Indicator", "Unit", "Progress Value", "Explanation", "Baseline",
-         "Baseline Yr", "Target", "Target Yr", "Level of Result",
-         "Data Collection"] + STRATEGIC_HEADERS + SUMMARY_HEADERS +
-        pf_out_headings)
+        RESULT_HEADERS + STRATEGIC_HEADERS + SUMMARY_HEADERS + pf_out_headings)
 
     # One row per grant and year, blank where the section was left unfilled,
     # so gaps are as visible as answers.
     strat_ctx_headers = [h for h in ctx_headers if h != "Strategic Objective"]
     ws_strat = new_sheet("Strategic Objective & Progress",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + strat_ctx_headers +
-        [name for _, name in STRATEGIC_FIELDS])
+        [name for _, name in STRATEGIC_FIELDS] + pf_out_headings)
 
     # One row per lending operation, then per CPF, for each grant and year.
     ws_ops = new_sheet("Lending Operations",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
-        ["Entry", "Entry #", "Informed?", "P Number", "Instrument",
-         "Instrument (Other)", "Approval FY", "Operation Name",
-         "Total Commitment (US$m)", "Informed by F4D (US$m)",
-         "CPF Country", "CPF Year", "Evidence"])
+        OPERATION_HEADERS + pf_out_headings)
     # One row per collaboration; grants that answered the question but listed
     # none still get a row, so the sheet accounts for every reporting grant.
     ws_collab = new_sheet("Collaboration",
         ["Trust Fund #", "Grant Name", "TTL", "Fiscal Year"] + ctx_headers +
-        ["Collaboration Reported?", "Entry #", "Type",
-         "Team(s) / Organization(s)", "Description", "Lessons Learned"])
+        COLLABORATION_HEADERS + pf_out_headings)
     ws_raw = new_sheet("All Data (raw)", [
         "Trust Fund #", "Grant Name", "Fiscal Year", "Field", "Value", "Last Updated"])
 
@@ -854,7 +867,7 @@ def main():
 
     for tid, fid in sorted(grant_years, key=sort_key):
         add(ws_strat, prefix(tid, fid, skip={"Strategic Objective"})
-                      + strategic_row(tid, fid))
+                      + strategic_row(tid, fid) + portfolio(tid))
 
     for tid, fid in sorted(set(ops) | set(cpfs), key=sort_key):
         for n, o in enumerate(ops.get((tid, fid), []), start=1):
@@ -863,21 +876,25 @@ def main():
                 o.get("p_number", ""), o.get("p_code_instrument", ""),
                 o.get("p_code_instrument_description", ""), o.get("approval_fy", ""),
                 o.get("operation_name", ""), number(o.get("total_commitment")),
-                number(o.get("informed_by_f4d")), "", "", o.get("evidence", "")])
+                number(o.get("informed_by_f4d")), "", "", o.get("evidence", "")]
+                + portfolio(tid))
         for n, c in enumerate(cpfs.get((tid, fid), []), start=1):
             add(ws_ops, prefix(tid, fid) + [
                 "CPF", n, c.get("informed_cpf", ""), "", "", "", "", "", "", "",
-                c.get("country", ""), c.get("year", ""), c.get("evidence", "")])
+                c.get("country", ""), c.get("year", ""), c.get("evidence", "")]
+                + portfolio(tid))
 
     for tid, fid in sorted(set(collabs) | set(collab_answer), key=sort_key):
         answer = collab_answer.get((tid, fid), "")
         entries = collabs.get((tid, fid), [])
         if not entries:
-            add(ws_collab, prefix(tid, fid) + [answer, "", "", "", "", ""])
+            add(ws_collab, prefix(tid, fid) + [answer, "", "", "", "", ""]
+                           + portfolio(tid))
         for n, b in enumerate(entries, start=1):
             add(ws_collab, prefix(tid, fid) + [
                 answer, n, b.get("type", ""), b.get("partner_detail", ""),
-                b.get("describe", ""), b.get("lessons_learned", "")])
+                b.get("describe", ""), b.get("lessons_learned", "")]
+                + portfolio(tid))
 
     # column widths by header name (robust to the added context columns)
     WIDE = {"Grant Name": 34, "TTL": 20, "Strategic Objective": 48, "Description": 45,
