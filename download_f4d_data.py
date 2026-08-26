@@ -23,13 +23,18 @@ HOW TO RUN
   2. Open a terminal in the folder that has this file.
   3. Run:   py download_f4d_data.py
      (on some machines the command is `python` instead of `py`)
-  4. Type the database password when asked (Caleb will give it to you), Enter.
+  4. Answer the two questions it asks:
+       * whose computer this is -- type your name if you are listed in
+         KNOWN_USERS below, otherwise just press Enter;
+       * the database password (Caleb will give it to you), then Enter.
   5. When it finishes it prints the name of the Excel file it created, in this
      same folder. Open that file in Excel.
 
-Before the first run, set PORTFOLIO_DATA_PATH below to wherever you keep the
-portfolio spreadsheet. If it can't be found the export still works -- it just
-leaves the portfolio columns out and says so.
+The portfolio spreadsheet is found in one of three ways, in this order:
+PORTFOLIO_DATA_PATH below if you filled it in, then the saved location for
+whoever answers the "whose computer is this" question, then any portfolio file
+sitting next to this script. If none of them turn up a file the export still
+works -- it just leaves the portfolio columns out and says so.
 
 Re-downloading this script replaces the file, and with it anything you typed
 into PORTFOLIO_DATA_PATH. Two ways to avoid re-typing it:
@@ -59,6 +64,14 @@ sql_database, sql_port, sql_username, sql_password) but you normally don't need 
 #      set the portfolio_data_path environment variable instead.
 #  Nothing is written to this file; it is only read.
 PORTFOLIO_DATA_PATH = r""
+
+#  Saved locations for people who can't edit this file. When PORTFOLIO_DATA_PATH
+#  above is empty, the script asks whose computer it is running on and uses the
+#  matching path from here. To add someone, copy a line and change the name and
+#  the path (keep the r before the quotes).
+KNOWN_USERS = {
+    "Sara": r"C:\Users\wb293537\OneDrive - WBG\Desktop\F4D M&E Portfolio Data_MASTER.csv",
+}
 
 #  Which portfolio columns to add to the export. Empty list = all of them.
 #  To keep the sheets narrow, list the exact headings you want instead, e.g.
@@ -184,6 +197,38 @@ def column_letter(index):
     return letters
 
 
+def ask_known_user():
+    """Ask whose computer this is; return that person's saved path, or None.
+
+    Skipped when nobody is listed in KNOWN_USERS, and when the script is run
+    without a keyboard attached (a scheduled task), where input() gets no answer.
+    """
+    if not KNOWN_USERS:
+        return None
+    names = list(KNOWN_USERS)
+    try:
+        if len(names) == 1:
+            answer = input(f"Is this {names[0]}? Type  yes  and press Enter. "
+                           "If not, just press Enter: ")
+            chosen = names[0] if answer.strip().lower() in ("y", "yes") else None
+        else:
+            answer = input(f"Whose computer is this? Type a name ({', '.join(names)}) "
+                           "or just press Enter to skip: ")
+            chosen = next((n for n in names
+                           if n.lower() == answer.strip().lower()), None)
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if not chosen:
+        return None
+    path = KNOWN_USERS[chosen]
+    if os.path.isfile(path):
+        return path
+    print(f"   ! {chosen}'s saved portfolio file isn't there any more:")
+    print(f"     {path}")
+    print("     Looking for it in the usual folders instead.")
+    return None
+
+
 def find_portfolio_file():
     """Locate the portfolio file. Returns a path, or None if there isn't one.
 
@@ -217,6 +262,10 @@ def find_portfolio_file():
                 return os.path.join(folder, given)
         print(f"   ! PORTFOLIO_DATA_PATH points at something that isn't there: {given}")
         return None
+
+    saved = ask_known_user()
+    if saved:
+        return saved
 
     for folder in folders:
         found = newest_in(folder)
