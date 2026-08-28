@@ -1,4 +1,5 @@
 # Auto-split from the original monolithic main.py. See git history.
+import ast
 import datetime
 import streamlit as st
 from connection import create_session
@@ -11,12 +12,62 @@ from f4d.context import (
 from f4d.exports import read_data
 
 
+def _row_index(field, prefix):
+    """N from a long-format field name like 'operation_3', else None.
+
+    Used to pick this section's own rows out of the grant's full row set and to
+    read them back in numeric order: Save writes each entry to
+    f"{prefix}{position + 1}", so loading them out of order would write one
+    entry's content into another's row.
+    """
+    if not field.startswith(prefix):
+        return None
+    suffix = field[len(prefix):]
+    return int(suffix) if suffix.isdigit() else None
+
+
+def _load_rows(session, prefix):
+    """Saved entries for one repeating block (operations / CPFs), in order."""
+    rows = session.query(GrantInfo).filter_by(
+        trustfund_id=st.session_state.current_trustfund_id,
+        fiscal_year_id=st.session_state.current_fiscal_year_id,
+        deleted=False
+    ).all()
+
+    by_index = {}
+    for row in rows:
+        index = _row_index(row.field, prefix)
+        if index is None:
+            continue
+        try:
+            by_index[index] = ast.literal_eval(row.value)
+        except (ValueError, SyntaxError):
+            continue
+    return [by_index[i] for i in sorted(by_index)]
+
+
 def lending_operations():
     st.success("### 3. Operations Informed and Country Engagements Informed by F4D")
 
     if not st.session_state.current_fiscal_year_id:
         st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
         return
+
+    # operations()/cpfs() below only read from the DB when their list in session
+    # state is empty, so without this guard the first report loaded in a browser
+    # tab stayed in the list for every report opened afterwards — and Save writes
+    # that list to whichever trust fund/fiscal year is current, copying one
+    # grant's operations onto another. Drop both lists whenever the report being
+    # edited changes so they reload from the DB.
+    _loaded_key = (st.session_state.current_trustfund_id,
+                   st.session_state.current_fiscal_year_id)
+    if st.session_state.get("ops_loaded_for") != _loaded_key:
+        for _k in ("operation_list", "operations_initial_values",
+                   "cpf_list", "cpfs_initial_values"):
+            st.session_state.pop(_k, None)
+        st.session_state.operations_unsaved_changes = False
+        st.session_state.cpfs_unsaved_changes = False
+        st.session_state["ops_loaded_for"] = _loaded_key
 
     operations()
     cpfs()
@@ -35,22 +86,18 @@ def operations():
 
 
     # Populate the session state with existing operations only if the session is empty
+    #
+    # The query returns every field saved for this grant/fiscal year, not just
+    # the operations. This used to walk that whole row set and reset the list on
+    # any row that wasn't an operation_N -- so saved operations were thrown away
+    # whenever another section's row came back after them (which is what the DB
+    # does once any other section is saved). The TTL saw "Save" succeed and the
+    # operations gone the next time the page loaded. Keep only our own rows.
     if not st.session_state['operation_list']:
-        long_format_entries = session.query(GrantInfo).filter_by(
-            trustfund_id=st.session_state.current_trustfund_id,
-            fiscal_year_id=st.session_state.current_fiscal_year_id,
-            deleted=False
-        ).all()
-    
-
-        for entry in long_format_entries:
-            if entry.field.startswith("operation_"):
-                operation_data = eval(entry.value)  # Assuming the value is stored in a dict format
-                st.session_state['operation_list'].append(operation_data)
-            else:
-                st.session_state['operation_list'] =[]
-                st.session_state.operations_unsaved_changes = False
-                st.session_state.operations_initial_values = []
+        st.session_state['operation_list'] = _load_rows(session, "operation_")
+        st.session_state.operations_initial_values = deep_copy_operations(
+            st.session_state['operation_list'])
+        st.session_state.operations_unsaved_changes = False
 
     # Variable to hold index of operation to delete
     operation_to_delete = None
@@ -313,30 +360,13 @@ def cpfs():
         st.session_state['cpf_list'] = []
 
     # Populate the session state with existing cpfs only if the session is empty
+    # (same fix as the operations block above: other sections' rows must not
+    # wipe the CPFs that were loaded before them).
     if not st.session_state['cpf_list']:
-        long_format_entries = session.query(GrantInfo).filter_by(
-            trustfund_id=st.session_state.current_trustfund_id,
-            fiscal_year_id=st.session_state.current_fiscal_year_id,
-            deleted=False
-        ).all()
-
-        for entry in long_format_entries:
-            if entry.field.startswith("cpf_"):
-                # Assuming the value is stored as a stringified dictionary
-                cpf_data = eval(entry.value)  # Use caution with eval
-                st.session_state['cpf_list'].append(cpf_data)
-            else:
-                st.session_state['cpf_list'] = []
-                st.session_state.cpfs_unsaved_changes = False  # Reset unsaved changes flag
-                st.session_state.cpfs_initial_values = []  # Reset initial values
-            
-
-
-            # Store initial values for change detection
-            if "cpfs_initial_values" not in st.session_state:
-                st.session_state.cpfs_initial_values = deep_copy_cpfs(st.session_state['cpf_list'])
-                st.session_state.cpfs_unsaved_changes = False
-
+        st.session_state['cpf_list'] = _load_rows(session, "cpf_")
+        st.session_state.cpfs_initial_values = deep_copy_cpfs(
+            st.session_state['cpf_list'])
+        st.session_state.cpfs_unsaved_changes = False
 
     cpf_to_delete = None  # Variable to hold index of cpf to delete
 
