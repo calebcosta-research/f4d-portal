@@ -12,4 +12,7 @@ __pycache__/
 exports/
 app.zip
 applog.txt
-build_deploy_zip.py
+# Other systems' files: the Azure deployment and the local dev seeds.
+deploy/
+dev/
+docs/

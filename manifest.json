@@ -38,56 +38,14 @@
     "docs/ITS_hosting_request_DRAFT.md": {
       "checksum": "92bcf0b5098b7cc1411aa4f0da8d06ea"
     },
-    "docs/azure_provisioning_request.md": {
-      "checksum": "6b626a06e77f6533ddb32e517f26f108"
-    },
     "f4d/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
-    },
-    "f4d/__pycache__/__init__.cpython-311.pyc": {
-      "checksum": "b1c135d276eaf0a40ad38d8745b23d2d"
-    },
-    "f4d/__pycache__/auth.cpython-311.pyc": {
-      "checksum": "52664901daa6f7c9c0e8d6fde8959681"
-    },
-    "f4d/__pycache__/config.cpython-311.pyc": {
-      "checksum": "d860e33792dc15b9e2c915e281135216"
-    },
-    "f4d/__pycache__/context.cpython-311.pyc": {
-      "checksum": "692ed6624fd354f33769928bf296d534"
-    },
-    "f4d/__pycache__/data_access.cpython-311.pyc": {
-      "checksum": "71a961fe93efeb069a609d37dbedb535"
-    },
-    "f4d/__pycache__/edit_results.cpython-311.pyc": {
-      "checksum": "ec8f4cb00a1e72466f5fd36193540b71"
-    },
-    "f4d/__pycache__/exports.cpython-311.pyc": {
-      "checksum": "dd78e5abcdc000251c9d28172216a8a7"
-    },
-    "f4d/__pycache__/master_export.cpython-311.pyc": {
-      "checksum": "3c4b9e699fc3d2ea0414cd2bdc42cc49"
-    },
-    "f4d/__pycache__/reporting_export.cpython-311.pyc": {
-      "checksum": "1317796b512e7cce6bacecdc3c4945b1"
-    },
-    "f4d/__pycache__/shell.cpython-311.pyc": {
-      "checksum": "7e5fa5e23e845b5e92ca8f6face43289"
-    },
-    "f4d/__pycache__/validation.cpython-311.pyc": {
-      "checksum": "7f3a44609e90905f377a0b5d391e62d8"
     },
     "f4d/auth.py": {
       "checksum": "0696d8a77e7a7b6c0f945fb5ec15fd76"
     },
     "f4d/batch/__init__.py": {
       "checksum": "456598cf60679b674b22cb652253d014"
-    },
-    "f4d/batch/__pycache__/__init__.cpython-311.pyc": {
-      "checksum": "8deffdac5b1e2b35c72fae26baae6663"
-    },
-    "f4d/batch/__pycache__/core.cpython-311.pyc": {
-      "checksum": "15a4162f71897c41739595fbee7bac98"
     },
     "f4d/batch/core.py": {
       "checksum": "94bd1f9f84248979c0c28e3651874383"
@@ -115,33 +73,6 @@
     },
     "f4d/sections/__init__.py": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
-    },
-    "f4d/sections/__pycache__/__init__.cpython-311.pyc": {
-      "checksum": "d0a788006953e3701b59119bcdfe8cdb"
-    },
-    "f4d/sections/__pycache__/basic_grant_info.cpython-311.pyc": {
-      "checksum": "4adf81cdb771d88929eeabc3388851fb"
-    },
-    "f4d/sections/__pycache__/collaboration.cpython-311.pyc": {
-      "checksum": "e678628e5e781190bae8f4095cfdfdb5"
-    },
-    "f4d/sections/__pycache__/custom_indicators.cpython-311.pyc": {
-      "checksum": "21ca8f4517b7c3a988ce956d45a52611"
-    },
-    "f4d/sections/__pycache__/deliverables.cpython-311.pyc": {
-      "checksum": "55f88882b35eb9f5545d6bed764401fd"
-    },
-    "f4d/sections/__pycache__/home.cpython-311.pyc": {
-      "checksum": "45964e3fe471e6b751819a2c8209e61f"
-    },
-    "f4d/sections/__pycache__/lending_operations.cpython-311.pyc": {
-      "checksum": "eb8817a6ded679d1c53f8f54564ceeb4"
-    },
-    "f4d/sections/__pycache__/review_submit.cpython-311.pyc": {
-      "checksum": "36d316c28e3ad592f29a49453a129f68"
-    },
-    "f4d/sections/__pycache__/strategic_objective.cpython-311.pyc": {
-      "checksum": "bdd54e17e354f578990a2057242db255"
     },
     "f4d/sections/basic_grant_info.py": {
       "checksum": "c5648533c213979bf229dac0e3bbffcb"
@@ -178,21 +109,6 @@
     },
     "model.py": {
       "checksum": "ca33040ded864842451eb4451346c560"
-    },
-    "seed_all_from_master.py": {
-      "checksum": "dcd9b3997fe5a599d95ab0db0dc673d8"
-    },
-    "seed_demo_fund.py": {
-      "checksum": "fdd47b9710eb119bab4bf9d8ab8ff705"
-    },
-    "seed_dev.py": {
-      "checksum": "695ea32455a407cb6852d70d1ab2ec34"
-    },
-    "seed_haiti_example.py": {
-      "checksum": "b9a1c0f981147df8d236ffe9b2a64ff8"
-    },
-    "seed_test_data.py": {
-      "checksum": "5d762cda74e0413015bab24f2748f03f"
     },
     "superadmin.py": {
       "checksum": "365d42d93c5d91e1bd424b0f1c8d231e"

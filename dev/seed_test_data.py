@@ -20,9 +20,15 @@ base rows too) and adds enough content to exercise the recent portal edits:
 Idempotent: re-running will not duplicate rows and will not overwrite
 report content you have already edited in the app. SQLite local dev only:
 
-    ./venv/Scripts/python.exe seed_test_data.py
+    ./venv/Scripts/python.exe dev/seed_test_data.py
 """
 import datetime
+
+# This script lives below the repo root but imports the app's modules, so put
+# the repo root on sys.path before importing them.
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from connection import create_session
 from model import (

@@ -12,12 +12,17 @@ Reads the master path from env F4D_MASTER (default: the OneDrive copy).
 
 Run with the same DB env vars as the app, e.g. against Azure Postgres:
   db_backend=postgres sql_host=... sql_username=... sql_password=... \
-  sql_database=f4d sql_port=5432 db_schema= ./venv/Scripts/python.exe seed_all_from_master.py
+  sql_database=f4d sql_port=5432 db_schema= ./venv/Scripts/python.exe deploy/azure/ops/seed_all_from_master.py
 """
 import datetime
 import os
 
 import pandas as pd
+
+# This script lives below the repo root but imports the app's modules, so put
+# the repo root on sys.path before importing them.
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from connection import create_session
 from model import (

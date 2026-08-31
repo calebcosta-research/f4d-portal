@@ -13,9 +13,15 @@ Fiscal years seeded: FY24, FY25, FY26 (FY26 added for upcoming reporting).
 
 Demo login:  username = haiti_demo   password = demo123
 
-    ./venv/Scripts/python.exe seed_haiti_example.py
+    ./venv/Scripts/python.exe dev/seed_haiti_example.py
 """
 import datetime
+
+# This script lives below the repo root but imports the app's modules, so put
+# the repo root on sys.path before importing them.
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from connection import create_session
 from model import (

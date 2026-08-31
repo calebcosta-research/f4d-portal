@@ -155,18 +155,21 @@ def upload_report(data):
        ``AZURE_STORAGE_CONNECTION_STRING`` — local development only; it embeds
        a storage account key.
     """
-    from azure.storage.blob import BlobServiceClient, ContentSettings
-
     account_url = os.environ.get("F4D_STORAGE_ACCOUNT_URL")
     conn = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    if not account_url and not conn:
+        return False
+
+    # Imported only once a destination is configured, so the Azure SDK stays an
+    # optional dependency. The Posit Connect deployment never uploads (its
+    # outbound network is blocked) and so need not install it.
+    from azure.storage.blob import BlobServiceClient, ContentSettings
 
     if account_url:
         from azure.identity import DefaultAzureCredential
         service = BlobServiceClient(account_url, credential=DefaultAzureCredential())
-    elif conn:
-        service = BlobServiceClient.from_connection_string(conn)
     else:
-        return False
+        service = BlobServiceClient.from_connection_string(conn)
 
     service.get_blob_client(container=CONTAINER, blob=BLOB_NAME).upload_blob(
         data, overwrite=True,

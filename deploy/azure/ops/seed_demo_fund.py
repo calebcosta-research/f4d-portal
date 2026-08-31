@@ -5,12 +5,17 @@ reports, so the "Previous Fiscal Year" panels populate (view FY25 -> FY24 shows;
 view FY26 -> FY25 shows). Fully fictional content.
 
 Clean rebuild (safe to re-run). Delete it afterwards with:
-    ./venv/Scripts/python.exe seed_demo_fund.py --delete
+    ./venv/Scripts/python.exe deploy/azure/ops/seed_demo_fund.py --delete
 
 Run against Azure Postgres with the app's DB env vars set.
 """
 import datetime
 import sys
+
+# This script lives below the repo root but imports the app's modules, so put
+# the repo root on sys.path before importing them.
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from connection import create_session
 from model import (

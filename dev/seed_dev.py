@@ -8,9 +8,15 @@ deliverables / results-indicator sections have content to show.
 Idempotent: re-running it will not duplicate rows. Intended for SQLite
 local development only (run with db_backend=sqlite). Usage:
 
-    ./venv/Scripts/python.exe seed_dev.py
+    ./venv/Scripts/python.exe dev/seed_dev.py
 """
 import datetime
+
+# This script lives below the repo root but imports the app's modules, so put
+# the repo root on sys.path before importing them.
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from connection import create_session
 from model import (

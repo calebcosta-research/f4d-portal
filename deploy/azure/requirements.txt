@@ -1,0 +1,31 @@
+# Dependency set for the Azure App Service deployment.
+# The repo-root requirements.txt is the Posit Connect set; these are not
+# interchangeable. deploy/azure/build_deploy_zip.py substitutes this file
+# into app.zip in place of the root one.
+
+streamlit==1.58.0
+pandas==2.2.3
+plotly==6.7.0
+matplotlib==3.10.9
+SQLAlchemy==2.0.50
+python-dotenv==1.2.2
+openpyxl==3.1.5
+
+# --- Database drivers -------------------------------------------------------
+# psycopg2-binary: Azure Database for PostgreSQL (db_backend=postgres). A
+# self-contained wheel, so it needs nothing from the system image.
+psycopg2-binary==2.9.9
+# pymssql: Azure SQL / SQL Server (db_backend=mssql, sql_driver=pymssql). Also
+# self-contained. NOTE it cannot do Entra ID / managed-identity auth -- it is
+# username+password only. If the architecture mandates managed identity to the
+# database, pyodbc is required instead, and then the msodbcsql18 system driver
+# has to be installed via a custom container or a startup script, because the
+# stock App Service Python image does not ship it.
+pymssql==2.3.1
+
+# --- Excel export to Blob Storage -------------------------------------------
+# Used by f4d/reporting_export.py. azure-identity backs DefaultAzureCredential,
+# which is the auth mode that works when the storage account has shared-key
+# access disabled (the WB default).
+azure-storage-blob==12.23.1
+azure-identity==1.19.0
