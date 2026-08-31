@@ -109,3 +109,33 @@ def current_trustfund_id():
     trustfund_id = trustfund.id
     return trustfund_id
 
+
+
+# Keys that survive a session reset. Everything else in st.session_state is
+# per-grant form state and must not carry over from one login to the next.
+_SESSION_RESET_KEEP = frozenset({"logged_in", "user_id"})
+
+
+def reset_session_state(keep=_SESSION_RESET_KEEP):
+    """Wipe all per-report state from st.session_state.
+
+    TTLs who report for several grants log out of one and into the next in the
+    same browser tab. Streamlit keeps session_state alive for the lifetime of
+    that tab, so without this every widget key, cached form value and
+    ``*_loaded_for`` guard from the previous grant is still present when the
+    next grant's form renders — the widget key wins over the ``value=`` the
+    section passes, so the previous grant's answers appear pre-filled (and can
+    be saved onto the new grant). Reloading the page was the only cure because
+    a fresh page load starts a fresh Streamlit session.
+
+    Called on both login and logout so neither direction can leak.
+    """
+    for key in list(st.session_state.keys()):
+        if key in keep:
+            continue
+        try:
+            del st.session_state[key]
+        except Exception:
+            # A key tied to a widget rendered earlier in this same run can
+            # refuse deletion; the rerun that follows discards it anyway.
+            pass

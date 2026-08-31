@@ -15,6 +15,16 @@ from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
 
 
+_DELIVERABLE_WIDGET_PREFIXES = (
+    "date_input_", "number_input_", "short_text_input_", "long_text_input_",
+    "percentage_input_", "categorical_input_", "progress_",
+    "deliverable_quantity_", "next_steps_", "supporting_materials_url_",
+    "description_", "data_source_", "custom_input_", "custom_progress_",
+    "custom_qty_", "custom_next_", "custom_url_", "custom_desc_",
+    "custom_source_",
+)
+
+
 def _as_number(v):
     """Coerce a stored value to a float for st.number_input (which rejects strings);
     returns None when the value is missing or not numeric so the field shows empty."""
@@ -194,6 +204,20 @@ def _deliverables_impl():
         trustfund_id=trustfund_id,
         fiscal_year_id=st.session_state.current_fiscal_year_id,
         deleted=False).first()
+
+    # These sections key their widgets on the indicator mapping id, which does
+    # not include the fiscal year, so a widget value typed against one report
+    # stayed in session_state and won over the ``value=`` loaded from the DB for
+    # the next report opened in the same browser tab. Drop the section's widget
+    # keys whenever the report being edited changes so every field reloads.
+    _loaded_key = (trustfund_id, st.session_state.current_fiscal_year_id)
+    if st.session_state.get("deliv_loaded_for") != _loaded_key:
+        for _k in list(st.session_state.keys()):
+            if any(_k.startswith(p) for p in _DELIVERABLE_WIDGET_PREFIXES):
+                st.session_state.pop(_k, None)
+        st.session_state.pop("deliverables_initial_values", None)
+        st.session_state["deliverables_unsaved_changes"] = False
+        st.session_state["deliv_loaded_for"] = _loaded_key
 
     # Fetch all mapping entries for the current trustfund_id
     mappings = session.query(TrustFundIndicatorMapping).filter(

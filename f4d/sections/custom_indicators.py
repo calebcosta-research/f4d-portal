@@ -15,6 +15,16 @@ from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
 
 
+_INDICATOR_WIDGET_PREFIXES = (
+    "level_of_result_", "unit_sel_", "number_input_", "yesno_input_",
+    "text_input_", "progress_", "baseline_value_", "year_baseline_",
+    "target_value_", "year_target_", "data_collection_",
+    "ci_custom_level_", "ci_custom_unit_", "ci_custom_input_",
+    "ci_custom_progress_", "ci_custom_baseline_", "ci_custom_ybase_",
+    "ci_custom_target_", "ci_custom_ytarget_", "ci_custom_datacol_",
+)
+
+
 def _as_number(v):
     """Coerce a stored value to a float for st.number_input (which rejects strings);
     returns None when the value is missing or not numeric so the field shows empty."""
@@ -202,6 +212,20 @@ def _custom_indicators_impl():
         trustfund_id=trustfund_id,
         fiscal_year_id=st.session_state.current_fiscal_year_id,
         deleted=False).first()
+
+    # These sections key their widgets on the indicator mapping id, which does
+    # not include the fiscal year, so a widget value typed against one report
+    # stayed in session_state and won over the ``value=`` loaded from the DB for
+    # the next report opened in the same browser tab. Drop the section's widget
+    # keys whenever the report being edited changes so every field reloads.
+    _loaded_key = (trustfund_id, st.session_state.current_fiscal_year_id)
+    if st.session_state.get("ci_loaded_for") != _loaded_key:
+        for _k in list(st.session_state.keys()):
+            if any(_k.startswith(p) for p in _INDICATOR_WIDGET_PREFIXES):
+                st.session_state.pop(_k, None)
+        st.session_state.pop("custom_indicators_initial_values", None)
+        st.session_state["custom_indicators_unsaved_changes"] = False
+        st.session_state["ci_loaded_for"] = _loaded_key
 
     # Fetch all mapping entries for the current trustfund_id
     mappings = session.query(TrustFundIndicatorMapping).filter(

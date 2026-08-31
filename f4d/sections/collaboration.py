@@ -41,11 +41,15 @@ def collaboration_partnership():
     existing_grant_info = session.query(GrantInfo).filter_by(
         trustfund_id=tf_id, fiscal_year_id=fy_id).first()
 
-    # Reload widgets/entries from the DB whenever the fiscal year changes.
-    if st.session_state.get("collab_loaded_for_fy") != fy_id:
+    # Reload widgets/entries from the DB whenever the report being edited
+    # changes. Keyed on the trust fund too — fiscal year ids are shared across
+    # grants, so a fy-only guard misses a switch between two grants in the
+    # same reporting year.
+    _loaded_key = (tf_id, fy_id)
+    if st.session_state.get("collab_loaded_for_fy") != _loaded_key:
         st.session_state.pop("collaborations_input", None)
         st.session_state.pop("collaboration_list", None)
-        st.session_state["collab_loaded_for_fy"] = fy_id
+        st.session_state["collab_loaded_for_fy"] = _loaded_key
 
     # ---- Top-level Yes/No question -------------------------------------------
     q_row = session.query(GrantInfo).filter_by(

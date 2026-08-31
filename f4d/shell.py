@@ -6,7 +6,7 @@ from model import (
 )
 from f4d.context import (
     _resolve_grant_context, current_team_id,
-    current_username, current_grantname,
+    current_username, current_grantname, reset_session_state,
 )
 from f4d.auth import display_login_form
 from f4d.sections.home import home
@@ -138,8 +138,9 @@ def display_main_app():
             "strat_loaded_for_fy", "strategic_objective_initial_values",
         ],
         "Lending Operations": [
-            "operation_list", "cpfs_list",
+            "operation_list", "cpf_list",
             "operations_unsaved_changes", "operations_initial_values",
+            "cpfs_unsaved_changes", "cpfs_initial_values", "ops_loaded_for",
         ],
         "Collaboration/Partnership": [
             "collaborations_input", "other_teams_input", "other_ifis_input",
@@ -200,6 +201,7 @@ def display_main_app():
         st.session_state.show_warning = False
         
         if st.session_state.logout_requested:
+            reset_session_state(keep=frozenset())
             st.session_state.logged_in = False
             st.session_state.logout_requested = False
         else:
@@ -218,6 +220,7 @@ def display_main_app():
             st.session_state.show_warning = True
             st.session_state.logout_requested = True
         else:
+            reset_session_state(keep=frozenset())
             st.session_state.logged_in = False
     
     # Check if we need to perform a rerun from the previous interaction
@@ -267,6 +270,7 @@ def display_main_app():
         if st.button("Logout", type="primary"):
             set_logout()
             if not has_unsaved_changes:
+                # set_logout() already cleared session state on this path.
                 st.success("Logged out successfully!")
                 st.rerun()
             st.session_state.current_trustfund_id = None

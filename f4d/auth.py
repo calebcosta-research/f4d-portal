@@ -9,6 +9,7 @@ from model import (
 from f4d.config import (
     super_admin_username, super_admin_password,
 )
+from f4d.context import reset_session_state
 
 
 def display_login_form():
@@ -28,6 +29,12 @@ def authenticate_user(username, password):
                 user = session.query(User).filter_by(username=username).first()
             else:
                 user = None
+
+            # Drop anything left over from a previous login in this browser
+            # tab before installing the new user's context, so a TTL who
+            # reports for several grants never sees the previous grant's
+            # answers pre-filled in the next one.
+            reset_session_state(keep=frozenset())
 
             # Update session state on successful login
             st.session_state.logged_in = True

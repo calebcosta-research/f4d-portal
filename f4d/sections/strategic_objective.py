@@ -17,17 +17,23 @@ def strategic_objective_progress():
         st.warning("Please go to **Basic Grant Information** and select a fiscal year first.")
         return
 
-    # Clear widget keys whenever the fiscal year changes so fields reload from DB
+    # Clear widget keys whenever the report being edited changes so fields
+    # reload from DB. The guard keys on the trust fund as well as the fiscal
+    # year: fiscal years are a shared lookup table, so FY26 has the same id for
+    # every grant and a fy-only guard would not fire for a TTL moving between
+    # two of their grants in the same reporting year.
     _STRAT_KEYS = [
         "strat_challenges", "strat_strategic_objective", "strat_overall_progress",
         "strat_implementation_challenges", "strat_public_communication_external",
         "strat_public_communication_internal",
     ]
-    if st.session_state.get("strat_loaded_for_fy") != st.session_state.current_fiscal_year_id:
+    _loaded_key = (st.session_state.current_trustfund_id,
+                   st.session_state.current_fiscal_year_id)
+    if st.session_state.get("strat_loaded_for_fy") != _loaded_key:
         for _k in _STRAT_KEYS:
             st.session_state.pop(_k, None)
         st.session_state.pop("strategic_objective_initial_values", None)
-        st.session_state["strat_loaded_for_fy"] = st.session_state.current_fiscal_year_id
+        st.session_state["strat_loaded_for_fy"] = _loaded_key
 
     # Create a new session
     session = create_session()

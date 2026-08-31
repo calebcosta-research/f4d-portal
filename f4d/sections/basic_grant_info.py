@@ -108,8 +108,14 @@ def basic_grant_info():
         "Advancing digitalization",
         "Financing solutions to close gender gaps",
     ]
-    # Use a sentinel so "creating new" (fy_id=None) is treated as its own stable state
-    _loaded_key = ("new" if st.session_state.get("bgi_creating_new") else st.session_state.current_fiscal_year_id)
+    # Use a sentinel so "creating new" (fy_id=None) is treated as its own stable
+    # state. The trust fund is part of the key because fiscal year ids are shared
+    # across grants — without it, a TTL switching between two of their own grants
+    # in the same reporting year keeps the previous grant's widget values.
+    _loaded_key = (
+        effective_trustfund_id,
+        "new" if st.session_state.get("bgi_creating_new") else st.session_state.current_fiscal_year_id,
+    )
     if st.session_state.get("bgi_loaded_for_fy") != _loaded_key:
         for _k in _BGI_WIDGET_KEYS:
             st.session_state.pop(_k, None)
@@ -503,7 +509,7 @@ def basic_grant_info():
                     st.session_state.current_trustfund_id = trustfund_id
                     st.session_state.current_fiscal_year_id = fiscal_year_id
                     st.session_state.bgi_creating_new = False
-                    st.session_state.bgi_loaded_for_fy = fiscal_year_id
+                    st.session_state.bgi_loaded_for_fy = (trustfund_id, fiscal_year_id)
                     st.success("Grant information saved successfully!")
             else:
                 st.error(f"Please fill in all mandatory fields: {', '.join(missing_fields)}")
