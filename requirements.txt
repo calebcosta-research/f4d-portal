@@ -7,7 +7,16 @@ python-dotenv==1.2.2
 psycopg2-binary==2.9.9
 openpyxl==3.1.5
 azure-storage-blob==12.23.1
+azure-identity==1.19.0
 pyodbc==5.2.0
-# pyodbc is the driver the original F4D app used on this Connect (ODBC Driver 17
-# for SQL Server), so the Connect build environment supports it. pymssql==2.3.1
-# is a self-contained fallback if a build ever lacks the system ODBC libraries.
+# azure-identity backs DefaultAzureCredential, used by f4d/reporting_export.py
+# when F4D_STORAGE_ACCOUNT_URL is set (managed identity instead of an account key).
+#
+# DB driver, App Service (Linux) note: pyodbc ships manylinux wheels, so pip
+# install succeeds, but at RUNTIME it needs the msodbcsql system driver present
+# in the image. The stock App Service Python image does not ship it. If the
+# target is SQL Server / Azure SQL, either
+#   * use pymssql==2.3.1 (self-contained, no system driver) and set
+#     sql_driver=pymssql -- but pymssql cannot do Entra/managed-identity auth; or
+#   * keep pyodbc and install msodbcsql18 via a custom container / startup script
+#     -- required if the architecture mandates managed-identity auth to SQL.

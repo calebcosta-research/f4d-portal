@@ -12,6 +12,7 @@ best-effort: any failure (e.g. blob not configured locally) is swallowed.
 """
 import ast
 import io
+import logging
 import os
 import threading
 from collections import defaultdict
@@ -141,14 +142,33 @@ def build_report_bytes(session=None):
 
 
 def upload_report(data):
-    """Upload the workbook to Azure Blob. Returns True/False. No-op if unset."""
-    conn = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-    if not conn:
-        return False
+    """Upload the workbook to Azure Blob. Returns True/False. No-op if unset.
+
+    Two auth modes, tried in this order:
+
+    1. **Managed identity** (App Service). Set
+       ``F4D_STORAGE_ACCOUNT_URL=https://<account>.blob.core.windows.net``.
+       The App Service's identity needs the *Storage Blob Data Contributor*
+       role on the account. This is the only mode that works when the storage
+       account has shared-key access disabled, which is the WB default.
+    2. **Account-key connection string** via
+       ``AZURE_STORAGE_CONNECTION_STRING`` — local development only; it embeds
+       a storage account key.
+    """
     from azure.storage.blob import BlobServiceClient, ContentSettings
-    client = BlobServiceClient.from_connection_string(conn).get_blob_client(
-        container=CONTAINER, blob=BLOB_NAME)
-    client.upload_blob(
+
+    account_url = os.environ.get("F4D_STORAGE_ACCOUNT_URL")
+    conn = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+
+    if account_url:
+        from azure.identity import DefaultAzureCredential
+        service = BlobServiceClient(account_url, credential=DefaultAzureCredential())
+    elif conn:
+        service = BlobServiceClient.from_connection_string(conn)
+    else:
+        return False
+
+    service.get_blob_client(container=CONTAINER, blob=BLOB_NAME).upload_blob(
         data, overwrite=True,
         content_settings=ContentSettings(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -159,7 +179,10 @@ def _run():
     try:
         upload_report(build_report_bytes())
     except Exception:  # noqa: BLE001 - never break a save/submit
-        pass
+        # Still best-effort, but log it: silently swallowing meant a
+        # misconfigured storage account looked identical to a working one.
+        # On App Service this lands in the log stream.
+        logging.getLogger(__name__).exception("F4D report upload failed")
 
 
 def export_report_safe():
