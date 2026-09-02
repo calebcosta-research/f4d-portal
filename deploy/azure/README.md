@@ -18,6 +18,7 @@ specifics below come from.
 | `provisioning_request.md` | The ask to the platform team, for infrastructure this account cannot create itself. |
 | `ops/seed_all_from_master.py` | Bulk-loads every trust fund from the master workbook. Uses pandas + SQLAlchemy — fine here, unlike the Posit ops scripts. |
 | `ops/seed_demo_fund.py` | Seeds one fictional trust fund with two years of data, for demos. `--delete` removes it. |
+| `ops/export_live_to_sql.py` | Exports the live database to loadable `.sql` files, for migrating the running system onto Azure. Pure Python (pytds, no pandas) because it runs on the VDI. |
 
 The application itself is not here — it is at the repo root, shared with the
 live system. See the [root README](../../README.md).
