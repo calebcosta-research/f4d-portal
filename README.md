@@ -21,6 +21,18 @@ operational scripts that talk to each system's database.
 **Read the README in the relevant `deploy/` directory before deploying or
 running anything against a database.**
 
+## Branches
+
+| Branch | Feeds | Rule |
+|---|---|---|
+| `main` | Posit Connect (live) | Frozen as what Posit runs. Changes only by a deliberate merge, followed by a redeploy in Connect. |
+| `azure` | Azure DevOps, then Azure App Service | All migration work. Copied into the Azure DevOps repository's DEV branch. |
+
+Posit Connect deploys only from `main`, and only when someone redeploys it, so
+work on `azure` cannot reach the live system by accident. The shared application
+code will differ between the two branches until Azure replaces Posit. A fix the
+live system needs has to be merged to `main` on purpose.
+
 ## Layout
 
 ```
@@ -50,6 +62,7 @@ the application code:
 |---|---|
 | `db_backend` | `mssql`, `postgres`, or `sqlite` |
 | `sql_driver` | for `mssql` only: `pyodbc` (needs a system ODBC driver) or `pymssql` (self-contained) |
+| `sql_auth` | for `mssql` + `pyodbc` only: `sql` (username and password, the default) or `msi` (Azure managed identity, no password) |
 | `sql_host`, `sql_port`, `sql_username`, `sql_password`, `sql_database` | connection details |
 | `db_schema` | schema to namespace the tables into; blank for sqlite and postgres |
 
