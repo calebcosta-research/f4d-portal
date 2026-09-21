@@ -1,4 +1,4 @@
-"""Export the live F4D database to SQL files for loading into Azure SQL.
+r"""Export the live F4D database to SQL files for loading into Azure SQL.
 
 This runs on the WB VDI, which blocks compiled Python extensions by group
 policy -- so it uses pytds (pure Python) and the standard library only. No
