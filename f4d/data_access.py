@@ -2,6 +2,7 @@
 import ast
 import datetime
 import streamlit as st
+from f4d.stored_values import parse_stored
 from model import (
     GrantInfo,
 )
@@ -153,7 +154,7 @@ def get_long_format_dict(session, trustfund_id, fiscal_year_id, field_name, defa
     try:
         value_str = get_long_format_value(session, trustfund_id, fiscal_year_id, field_name, '{}')
         if value_str and value_str != '{}':
-            return eval(value_str)
+            return parse_stored(value_str)
         else:
             return default_dict
     except Exception as e:

@@ -13,6 +13,7 @@ from f4d.context import (
 )
 from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
+from f4d.stored_values import parse_stored
 
 
 _DELIVERABLE_WIDGET_PREFIXES = (
@@ -75,7 +76,7 @@ def show_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_
     # Parse the JSON data from the deliverable entry
     try:
         # Assuming the value is stored as a JSON string
-        all_deliverable_data = eval(last_fiscal_year_info.value)
+        all_deliverable_data = parse_stored(last_fiscal_year_info.value)
     except:
         st.write("Error parsing deliverable data from previous fiscal year.")
         session.close()
@@ -137,7 +138,7 @@ def get_previous_fiscal_year_deliverables(trustfund_id, deliverable_id, fiscal_y
     
     # Parse the deliverables data from JSON
     try:
-        all_deliverable_data = eval(last_fiscal_year_info.value)
+        all_deliverable_data = parse_stored(last_fiscal_year_info.value)
     except:
         session.close()
         return None  # Error parsing data

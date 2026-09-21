@@ -14,6 +14,7 @@ import ast
 
 from connection import create_session
 from model import Country, F4DAssociationEnum, FiscalYear, GrantInfo, Indicator, Region, TrustFund, Team, User, TrustFundIndicatorMapping, delete_team
+from f4d.stored_values import parse_stored
 from dotenv import load_dotenv
 import os
 
@@ -3161,7 +3162,7 @@ def dashboards(team_id):
         GrantInfo.field == "custom_indicators").all()
 
     for grant_info in grant_infos:
-        custom_indicators_dict = eval(str(grant_info.value)) if grant_info.value else {}
+        custom_indicators_dict = parse_stored(str(grant_info.value)) if grant_info.value else {}
         
         if custom_indicators_dict:
 
@@ -3284,7 +3285,7 @@ def dashboards(team_id):
     GrantInfo.field == "deliverables").all()
 
     for grant_info in grant_infos_deliverables:
-        deliverables_dict = eval(str(grant_info.value)) if grant_info.value else {}
+        deliverables_dict = parse_stored(str(grant_info.value)) if grant_info.value else {}
         
         if deliverables_dict:
 

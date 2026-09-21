@@ -2,6 +2,7 @@
 import ast
 import datetime
 import streamlit as st
+from f4d.stored_values import parse_stored
 from connection import create_session
 from model import (
     F4DAssociationEnum, GrantInfo, TrustFund, Indicator, TrustFundIndicatorMapping,
@@ -293,7 +294,7 @@ def all_grants():
                                 
                                 # Assuming current_operation is a string representation of a dictionary
                                 try:
-                                    operation_data = eval(current_operation)  # Use eval only if you trust the source
+                                    operation_data = parse_stored(current_operation)
                                     st.session_state[operation_session_key].append({
                                         "informed_operation": operation_data.get('informed_operation'),
                                         "p_number": operation_data.get('p_number'),
@@ -711,7 +712,7 @@ def all_grants():
                         current_deliverables_str = get_long_format_value(session, trustfund_id, fiscal_year_id, 'deliverables', '{}')
                         if current_deliverables_str and current_deliverables_str != '{}':
                             try:
-                                new_deliverables_data = eval(current_deliverables_str)
+                                new_deliverables_data = parse_stored(current_deliverables_str)
                             except:
                                 new_deliverables_data = {}
 
@@ -866,7 +867,7 @@ def all_grants():
 
                         if current_custom_indicators_str and current_custom_indicators_str != '{}':
                             try:
-                                new_custom_indicators_data = eval(current_custom_indicators_str)
+                                new_custom_indicators_data = parse_stored(current_custom_indicators_str)
                             except Exception as e:
                                 print(f"Error parsing custom indicators: {e}")
                                 new_custom_indicators_data = {}

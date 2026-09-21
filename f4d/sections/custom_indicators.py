@@ -13,6 +13,7 @@ from f4d.context import (
 )
 from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
+from f4d.stored_values import parse_stored
 
 
 _INDICATOR_WIDGET_PREFIXES = (
@@ -83,7 +84,7 @@ def show_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year
 
     # Parse the JSON data from the deliverable entry
     try:
-        all_indicators_data = eval(last_fiscal_year_info.value)
+        all_indicators_data = parse_stored(last_fiscal_year_info.value)
     except:
         st.write("Error parsing indicator data from previous fiscal year.")
         session.close()
@@ -145,7 +146,7 @@ def get_previous_fiscal_year_indicators(trustfund_id, indicator_id, fiscal_year_
 
     # Parse the deliverables data from JSON
     try:
-        all_indicators_data = eval(last_fiscal_year_info.value)
+        all_indicators_data = parse_stored(last_fiscal_year_info.value)
     except:
         session.close()
         return None  # Error parsing data
