@@ -54,9 +54,18 @@ Settings: **WebSockets on** (Streamlit needs them), **Always On** on,
 Application settings for the database — the same variables `connection.py` reads
 everywhere, so no code changes when switching backends:
 
-- **Azure SQL:** `db_backend=mssql`, `sql_driver=pymssql`, `sql_port=1433`, plus
-  `sql_host` / `sql_username` / `sql_password` / `sql_database`, and `db_schema`
-  if the tables need namespacing.
+- **Azure SQL, managed identity** (no password anywhere): `db_backend=mssql`,
+  `sql_driver=pyodbc`, `sql_auth=msi`, `sql_port=1433`, `sql_host`,
+  `sql_database`, `db_schema=dbo`. Add `sql_msi_client_id` only for a
+  user-assigned identity. Requires ODBC Driver 18 on the App Service, which the
+  stock Python image lacks, and the identity added as a database user
+  (`CREATE USER [<app name>] FROM EXTERNAL PROVIDER`).
+- **Azure SQL, SQL login:** `db_backend=mssql`, `sql_driver=pymssql`,
+  `sql_port=1433`, plus `sql_host` / `sql_username` / `sql_password` /
+  `sql_database`, and `db_schema=dbo`. Works on the stock image.
+
+Always set `db_schema` explicitly. Left unset it defaults to
+`TF_RESULTS_REPORTING`, which won't exist on a new database.
 - **PostgreSQL flexible server:** `db_backend=postgres`, `sql_port=5432`,
   `db_schema=` (blank, so tables land in `public`).
 

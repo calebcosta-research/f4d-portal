@@ -17,11 +17,14 @@ openpyxl==3.1.5
 psycopg2-binary==2.9.9
 # pymssql: Azure SQL / SQL Server (db_backend=mssql, sql_driver=pymssql). Also
 # self-contained. NOTE it cannot do Entra ID / managed-identity auth -- it is
-# username+password only. If the architecture mandates managed identity to the
-# database, pyodbc is required instead, and then the msodbcsql18 system driver
-# has to be installed via a custom container or a startup script, because the
-# stock App Service Python image does not ship it.
+# username+password only.
 pymssql==2.3.1
+# pyodbc: Azure SQL with managed identity (sql_driver=pyodbc, sql_auth=msi).
+# The wheel installs anywhere, but connecting needs Microsoft's ODBC Driver 18
+# on the host, and the stock App Service Python image does not ship it -- it
+# has to come from a custom container or a startup script. Until it's there,
+# keep sql_driver=pymssql; this line is harmless while unused.
+pyodbc==5.2.0
 
 # --- Excel export to Blob Storage -------------------------------------------
 # Used by f4d/reporting_export.py. azure-identity backs DefaultAzureCredential,
