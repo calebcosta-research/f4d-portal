@@ -13,6 +13,7 @@ from f4d.context import (
 )
 from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
+from f4d import telemetry
 from f4d.stored_values import parse_stored
 
 
@@ -173,6 +174,7 @@ def custom_indicators():
             raise
         import traceback
         print("custom_indicators render error:\n" + traceback.format_exc())
+        telemetry.log.exception("section error", extra={"section": "custom_indicators"})
         st.error("⚠️ Something went wrong displaying this section. Your saved data "
                  "is safe. Please refresh the page and try again; if it keeps "
                  "happening, contact the F4D team.")
@@ -685,6 +687,9 @@ def _custom_indicators_impl():
 
                 session.commit()
                 export_report_safe()  # refresh the master export in the background
+                telemetry.event("results_saved",
+                                trustfund_id=st.session_state.current_trustfund_id,
+                                fiscal_year_id=st.session_state.current_fiscal_year_id)
                 # Reset the initial values to the current values after saving
                 st.session_state.custom_indicators_initial_values = current_values
                 st.session_state.custom_indicators_unsaved_changes = False

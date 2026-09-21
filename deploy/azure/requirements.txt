@@ -32,3 +32,9 @@ pyodbc==5.2.0
 # access disabled (the WB default).
 azure-storage-blob==12.23.1
 azure-identity==1.19.0
+
+# --- Application Insights ---------------------------------------------------
+# Used by f4d/telemetry.py, and only once APPLICATIONINSIGHTS_CONNECTION_STRING
+# is set. Resolves cleanly with the pins above for Python 3.12 on Linux (96
+# packages, all prebuilt wheels).
+azure-monitor-opentelemetry==1.8.10

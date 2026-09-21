@@ -17,7 +17,21 @@ st.set_page_config(page_title="F4D Results Reporting", layout="centered")
 # `from f4d.shell import main` ("No module named 'f4d'").
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from f4d import telemetry
+
+# Start Application Insights, once per process -- a no-op without a
+# connection string. Before the app imports, so its outbound calls are
+# instrumented.
+telemetry.setup()
+
 from f4d.shell import main
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Report anything unhandled before Streamlit displays it. Streamlit's
+        # own rerun/stop signals derive from BaseException, so they pass
+        # straight through.
+        telemetry.log.exception("unhandled error")
+        raise

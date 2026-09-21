@@ -9,6 +9,7 @@ from f4d.context import (
     current_username, current_grantname, reset_session_state,
 )
 from f4d.auth import display_login_form
+from f4d import telemetry
 from f4d.sections.home import home
 from f4d.sections.basic_grant_info import basic_grant_info
 from f4d.sections.strategic_objective import strategic_objective_progress
@@ -345,6 +346,12 @@ def display_main_app():
     # Render the selected page content (always render to preserve form data)
     current_main = st.session_state.current_main_page
     current_sub = st.session_state.current_subpage
+
+    # One event per page actually opened, not per rerun.
+    page = current_sub if current_main == "Report new results" else current_main
+    if st.session_state.get("_telemetry_page") != page:
+        st.session_state._telemetry_page = page
+        telemetry.event("page_viewed", page=page)
     
     if current_main == "Home":
         home()

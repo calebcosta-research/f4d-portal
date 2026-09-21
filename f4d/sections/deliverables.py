@@ -13,6 +13,7 @@ from f4d.context import (
 )
 from f4d.data_access import set_blob_entry_archived
 from f4d.reporting_export import export_report_safe
+from f4d import telemetry
 from f4d.stored_values import parse_stored
 
 
@@ -165,6 +166,7 @@ def deliverables():
             raise
         import traceback
         print("deliverables render error:\n" + traceback.format_exc())
+        telemetry.log.exception("section error", extra={"section": "deliverables"})
         st.error("⚠️ Something went wrong displaying this section. Your saved data "
                  "is safe. Please refresh the page and try again; if it keeps "
                  "happening, contact the F4D team.")
@@ -646,6 +648,9 @@ def _deliverables_impl():
 
                 session.commit()
                 export_report_safe()  # refresh the master export in the background
+                telemetry.event("deliverables_saved",
+                                trustfund_id=st.session_state.current_trustfund_id,
+                                fiscal_year_id=st.session_state.current_fiscal_year_id)
                 # Save always persists; missing mandatory fields are surfaced as
                 # a non-blocking note (the separate "Save draft" button is gone).
                 if missing_mandatory_fields:

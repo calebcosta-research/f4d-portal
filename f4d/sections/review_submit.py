@@ -12,6 +12,7 @@ from connection import create_session
 from f4d.data_access import get_long_format_value, update_long_format_field
 from f4d.validation import validate_report, report_is_complete
 from f4d.reporting_export import export_report_safe
+from f4d import telemetry
 
 
 def review_submit():
@@ -59,6 +60,7 @@ def review_submit():
                 update_long_format_field(session, tf_id, fy_id, "report_submitted_at", now)
                 # Refresh the master Excel export in Azure Blob (background thread).
                 export_report_safe()
+                telemetry.event("report_submitted", trustfund_id=tf_id, fiscal_year_id=fy_id)
                 st.success(f"Report submitted successfully on {now}.")
                 st.balloons()
                 st.rerun()

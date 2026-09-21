@@ -10,6 +10,7 @@ from f4d.config import (
     super_admin_username, super_admin_password,
 )
 from f4d.context import reset_session_state
+from f4d import telemetry
 
 
 def display_login_form():
@@ -39,11 +40,13 @@ def authenticate_user(username, password):
             # Update session state on successful login
             st.session_state.logged_in = True
             st.session_state.user_id = user.id if user else None
+            telemetry.event("login_succeeded", user_id=user.id if user else "super_admin")
             st.success("Logged in successfully!")
             st.session_state.current_trustfund_id = None
             st.session_state.current_fiscal_year_id = None
             st.rerun()
         else:
+            telemetry.event("login_failed")
             st.error("Invalid username or password.")
 
 

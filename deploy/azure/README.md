@@ -72,6 +72,27 @@ Always set `db_schema` explicitly. Left unset it defaults to
 Secrets belong in Key Vault and should reach the app as Key Vault references,
 not as literal application settings.
 
+### Application Insights
+
+`f4d/telemetry.py` exports the app's own logs, crashes and a few named events
+(logins, page views, saves, submissions). It is off until a connection string is
+set.
+
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` — from the App Insights resource.
+- `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD` — only if the
+  resource has local authentication disabled. Telemetry is then sent with the
+  App Service's managed identity, which needs the *Monitoring Metrics Publisher*
+  role on the resource. Add `;ClientId=<guid>` for a user-assigned identity.
+
+The app configures telemetry itself, so App Service's own automatic Python
+instrumentation should stay off; with both on, everything is reported twice.
+Events carry internal numeric IDs and page names only — no usernames, passwords
+or form content. The SDK's own usage reporting to Microsoft ("statsbeat") is off
+by default; set `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL=false` to allow it.
+
+Browser-side end-user monitoring is not implemented: Streamlit gives the app
+little control over the page's JavaScript.
+
 ### Excel export to Blob Storage
 
 `f4d/reporting_export.py` refreshes a workbook in Blob Storage after each save
