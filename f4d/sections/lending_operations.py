@@ -1,5 +1,6 @@
 # Auto-split from the original monolithic main.py. See git history.
 import ast
+from f4d.stored_values import parse_stored
 import datetime
 import streamlit as st
 from connection import create_session
@@ -40,7 +41,7 @@ def _load_rows(session, prefix):
         if index is None:
             continue
         try:
-            by_index[index] = ast.literal_eval(row.value)
+            by_index[index] = parse_stored(row.value)
         except (ValueError, SyntaxError):
             continue
     return [by_index[i] for i in sorted(by_index)]

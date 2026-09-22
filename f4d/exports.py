@@ -2,6 +2,7 @@
 import os
 import csv
 import ast
+from f4d.stored_values import parse_stored
 import datetime
 import streamlit as st
 from connection import create_session
@@ -188,11 +189,11 @@ def export_grants_deliverable(session, filename, team_id, trustfund_id=None):
             lessons_learned = grant_fields.get('lessons_learned').value if 'lessons_learned' in grant_fields else ''
             
             # Check each field for None before evaluating
-            pillar_explanations_dict = ast.literal_eval(pillar_explanations_str) if pillar_explanations_str and pillar_explanations_str != '{}' else {}
-            cct_explanations_dict = ast.literal_eval(cct_explanations_str) if cct_explanations_str and cct_explanations_str != '{}' else {}
-            operations_dict = ast.literal_eval(operations_str) if operations_str and operations_str != '{}' else {}
-            cpfs_dict = ast.literal_eval(cpfs_str) if cpfs_str and cpfs_str != '{}' else {}
-            deliverables_dict = ast.literal_eval(deliverables_str) if deliverables_str and deliverables_str != '{}' else {}
+            pillar_explanations_dict = parse_stored(pillar_explanations_str) if pillar_explanations_str and pillar_explanations_str != '{}' else {}
+            cct_explanations_dict = parse_stored(cct_explanations_str) if cct_explanations_str and cct_explanations_str != '{}' else {}
+            operations_dict = parse_stored(operations_str) if operations_str and operations_str != '{}' else {}
+            cpfs_dict = parse_stored(cpfs_str) if cpfs_str and cpfs_str != '{}' else {}
+            deliverables_dict = parse_stored(deliverables_str) if deliverables_str and deliverables_str != '{}' else {}
 
             region_name = ''
             if region_id:
@@ -410,11 +411,11 @@ def export_grants_indicator(session, filename, team_id, trustfund_id=None):
             lessons_learned = grant_fields.get('lessons_learned').value if 'lessons_learned' in grant_fields else ''
 
             # Check each field for None before evaluating
-            pillar_explanations_dict = ast.literal_eval(pillar_explanations_str) if pillar_explanations_str and pillar_explanations_str != '{}' else {}
-            cct_explanations_dict = ast.literal_eval(cct_explanations_str) if cct_explanations_str and cct_explanations_str != '{}' else {}
-            operations_dict = ast.literal_eval(operations_str) if operations_str and operations_str != '{}' else {}
-            cpfs_dict = ast.literal_eval(cpfs_str) if cpfs_str and cpfs_str != '{}' else {}
-            custom_indicators_dict = ast.literal_eval(custom_indicators_str) if custom_indicators_str and custom_indicators_str != '{}' else {}
+            pillar_explanations_dict = parse_stored(pillar_explanations_str) if pillar_explanations_str and pillar_explanations_str != '{}' else {}
+            cct_explanations_dict = parse_stored(cct_explanations_str) if cct_explanations_str and cct_explanations_str != '{}' else {}
+            operations_dict = parse_stored(operations_str) if operations_str and operations_str != '{}' else {}
+            cpfs_dict = parse_stored(cpfs_str) if cpfs_str and cpfs_str != '{}' else {}
+            custom_indicators_dict = parse_stored(custom_indicators_str) if custom_indicators_str and custom_indicators_str != '{}' else {}
 
             region_name = ''
             if region_id:

@@ -1,5 +1,6 @@
 # Auto-split from the original monolithic main.py. See git history.
 import ast
+from f4d.stored_values import parse_stored
 import datetime
 import streamlit as st
 from connection import create_session
@@ -98,7 +99,7 @@ def collaboration_partnership():
                 trustfund_id=tf_id, fiscal_year_id=fy_id, deleted=False).all():
             if r.field.startswith("collaboration_"):  # collaboration_1, _2, ... (not "collaborations")
                 try:
-                    entries.append(ast.literal_eval(r.value))
+                    entries.append(parse_stored(r.value))
                 except (ValueError, SyntaxError):
                     pass
         st.session_state["collaboration_list"] = entries

@@ -40,7 +40,7 @@ def set_blob_entry_archived(session, trustfund_id, fiscal_year_id, field_name,
     data = {}
     if record and record.value:
         try:
-            data = ast.literal_eval(record.value)
+            data = parse_stored(record.value)
         except (ValueError, SyntaxError):
             data = {}
     if not isinstance(data, dict):

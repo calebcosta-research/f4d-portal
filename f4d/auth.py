@@ -87,6 +87,9 @@ def check_credentials(session: Session, username: str, password: str) -> bool:
         return False
     except Exception as e:
         print(f"An error occurred: {e}")
+        # To the user this looks like a wrong password; usually it means the
+        # database is unreachable, so make sure someone can see it.
+        telemetry.log.exception("login check failed")
         return False
 
 

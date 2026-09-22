@@ -11,6 +11,7 @@ Pure module (no Streamlit) so it can be unit-tested headlessly.
 """
 
 import ast
+from f4d.stored_values import parse_stored
 
 from model import GrantInfo, Indicator, TrustFundIndicatorMapping
 
@@ -29,7 +30,7 @@ def _get_blob(session, tf_id, fy_id, field):
     if not raw:
         return {}
     try:
-        data = ast.literal_eval(raw)
+        data = parse_stored(raw)
         return data if isinstance(data, dict) else {}
     except (ValueError, SyntaxError):
         return {}

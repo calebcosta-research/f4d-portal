@@ -247,7 +247,7 @@ def _deliverables_impl():
 
         for entry in long_format_entries:
             if entry.field.startswith("deliverables"):
-                deliverables_data = ast.literal_eval(entry.value)
+                deliverables_data = parse_stored(entry.value)
 
     # Initialize session state for tracking changes
     if 'deliverables_initial_values' not in st.session_state:

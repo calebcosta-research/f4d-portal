@@ -1,4 +1,6 @@
 # Auto-split from the original monolithic main.py. See git history.
+import contextlib
+
 import streamlit as st
 from connection import create_session
 from model import (
@@ -133,9 +135,7 @@ def reset_session_state(keep=_SESSION_RESET_KEEP):
     for key in list(st.session_state.keys()):
         if key in keep:
             continue
-        try:
+        # A key tied to a widget rendered earlier in this same run can refuse
+        # deletion; the rerun that follows discards it anyway.
+        with contextlib.suppress(Exception):
             del st.session_state[key]
-        except Exception:
-            # A key tied to a widget rendered earlier in this same run can
-            # refuse deletion; the rerun that follows discards it anyway.
-            pass

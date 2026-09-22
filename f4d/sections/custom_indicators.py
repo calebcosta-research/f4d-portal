@@ -255,7 +255,7 @@ def _custom_indicators_impl():
 
         for entry in long_format_entries:
             if entry.field.startswith("custom_indicators"):
-                custom_indicators_data = ast.literal_eval(entry.value)
+                custom_indicators_data = parse_stored(entry.value)
 
     # Store initial values in session state for change detection
     if 'custom_indicators_initial_values' not in st.session_state:

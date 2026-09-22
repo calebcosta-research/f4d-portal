@@ -73,5 +73,9 @@ def _build(node):
         if ctor and not node.keywords:
             args = [_build(a) for a in node.args]
             if all(isinstance(a, int) and not isinstance(a, bool) for a in args):
-                return ctor(*args)
+                try:
+                    return ctor(*args)
+                except (TypeError, ValueError, OverflowError) as e:
+                    # e.g. datetime.date(2026) or month 13: callers expect ValueError.
+                    raise ValueError(f"invalid date/time in stored value: {e}") from None
     raise ValueError(f"unsupported syntax in stored value: {type(node).__name__}")

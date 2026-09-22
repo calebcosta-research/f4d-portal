@@ -1,5 +1,6 @@
 # Auto-split from the original monolithic main.py. See git history.
 import ast
+from f4d.stored_values import parse_stored
 import datetime
 import streamlit as st
 from connection import create_session
@@ -18,7 +19,6 @@ def basic_grant_info():
 
     session = create_session()
 
-    print(st.session_state.current_trustfund_id, st.session_state.current_fiscal_year_id)
 
     # Resolve the effective trustfund_id — session state may be None if user came from Home
     effective_trustfund_id = st.session_state.current_trustfund_id or current_trustfund_id()
@@ -139,7 +139,6 @@ def basic_grant_info():
 
     # If existing data is found, populate the variables with that data
     if existing_grant_info:
-        print("Existing grant info found:", existing_grant_info)
         trustfund_id = existing_grant_info.trustfund_id
         fiscal_year_id = existing_grant_info.fiscal_year_id
 
@@ -165,11 +164,10 @@ def basic_grant_info():
             elif entry.field == "ccts":
                 ccts = entry.value.split(', ') if entry.value else []
             elif entry.field == "pillar_explanations":
-                pillar_explanations = ast.literal_eval(entry.value) if entry.value else {}
+                pillar_explanations = parse_stored(entry.value) if entry.value else {}
             elif entry.field == "cct_explanations":
-                cct_explanations = ast.literal_eval(entry.value) if entry.value else {}
+                cct_explanations = parse_stored(entry.value) if entry.value else {}
 
-    print(st.session_state.grant_info_initial_values if "grant_info_initial_values" in st.session_state else "No initial values set")
     # Store initial values in session state for change detection
     if "grant_info_initial_values" not in st.session_state:
         st.session_state.grant_info_initial_values = {

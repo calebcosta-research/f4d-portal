@@ -11,6 +11,7 @@ or Submit returns immediately and the blob refreshes a moment later. It is
 best-effort: any failure (e.g. blob not configured locally) is swallowed.
 """
 import ast
+from f4d.stored_values import parse_stored
 import io
 import logging
 import os
@@ -31,7 +32,7 @@ def _parse_blob(value):
     if not value:
         return {}
     try:
-        data = ast.literal_eval(value)
+        data = parse_stored(value)
         return data if isinstance(data, dict) else {}
     except (ValueError, SyntaxError):
         return {}

@@ -67,7 +67,10 @@ def _show_report_mode_banner():
         else:
             st.info("➕ Creating new report")
     except Exception:
-        pass
+        # The banner is informational, so the page carries on without it --
+        # but a failure here usually means the database is unreachable, so
+        # record it rather than swallow it.
+        telemetry.log.warning("report status banner failed", exc_info=True)
     finally:
         session.close()
 
