@@ -59,10 +59,12 @@ everywhere, so no code changes when switching backends:
 
 - **Azure SQL, managed identity** (no password anywhere): `db_backend=mssql`,
   `sql_driver=pyodbc`, `sql_auth=msi`, `sql_port=1433`, `sql_host`,
-  `sql_database`, `db_schema=dbo`. Add `sql_msi_client_id` only for a
-  user-assigned identity. Requires ODBC Driver 18 on the App Service, which the
-  stock Python image lacks, and the identity added as a database user
-  (`CREATE USER [<app name>] FROM EXTERNAL PROVIDER`).
+  `sql_database`, `db_schema=dbo`. Add `sql_msi_client_id` (the identity's
+  Client ID) for a user-assigned identity. Needs ODBC Driver 18, which the
+  App Service Python 3.12 image (Debian 12) already has — checked over SSH
+  with `odbcinst -q -d` — and the identity must reach the database, e.g. via
+  the WB READER/WRITER AD groups, *provided those groups are themselves
+  database users*.
 - **Azure SQL, SQL login:** `db_backend=mssql`, `sql_driver=pymssql`,
   `sql_port=1433`, plus `sql_host` / `sql_username` / `sql_password` /
   `sql_database`, and `db_schema=dbo`. Works on the stock image.

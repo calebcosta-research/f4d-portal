@@ -20,10 +20,9 @@ psycopg2-binary==2.9.9
 # username+password only.
 pymssql==2.3.1
 # pyodbc: Azure SQL with managed identity (sql_driver=pyodbc, sql_auth=msi).
-# The wheel installs anywhere, but connecting needs Microsoft's ODBC Driver 18
-# on the host, and the stock App Service Python image does not ship it -- it
-# has to come from a custom container or a startup script. Until it's there,
-# keep sql_driver=pymssql; this line is harmless while unused.
+# Connecting needs Microsoft's ODBC Driver 18 on the host. The App Service
+# Python 3.12 image (Debian 12) ships both 17 and 18 -- checked over SSH with
+# `odbcinst -q -d` -- so no custom container or startup script is needed.
 pyodbc==5.2.0
 
 # --- Excel export to Blob Storage -------------------------------------------
