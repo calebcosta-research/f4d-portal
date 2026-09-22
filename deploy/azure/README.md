@@ -34,10 +34,13 @@ az webapp deployment source config-zip -g <resource-group> -n <app-name> --src a
 the Oryx build that installs dependencies; the other form uploads the files and
 the app then fails with `No module named streamlit`.
 
-`build_deploy_zip.py` excludes the venv, git, caches, local databases and logs,
-the Posit deployment files (`manifest.json`, `.rscignore`), the `dev/` seeds and
-this entire `deploy/` tree — the ops scripts are run from a workstation against
-the database, not from inside the App Service. It also substitutes this
+`build_deploy_zip.py` packs the **committed** files at a git ref (default
+`HEAD`; pass another as an argument), never the working tree, so uncommitted
+edits and stray local files can't ship. It leaves out the Posit deployment files
+(`manifest.json`, `.rscignore`), the `dev/` seeds, `docs/`, this entire
+`deploy/` tree — the ops scripts are run from a workstation against the
+database, not from inside the App Service — and workstation tooling the app
+never imports (the batch importer and `.env.example`). It also substitutes this
 directory's `requirements.txt` into the zip in place of the root one.
 
 ## App Service configuration
