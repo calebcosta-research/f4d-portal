@@ -8,7 +8,7 @@ Storage contract (must match the live app exactly):
   * One submission row == one (trust fund, fiscal year) pair.
   * Each non-empty field becomes a row in ``grant_info_long``:
     ``(trustfund_id, fiscal_year_id, field, value)``.
-  * Value encoding mirrors what edit_results.py / the sections write:
+  * Value encoding mirrors what the sections write:
       - text fields  -> the raw string
       - list fields  -> comma-joined string (the cell is taken as-is)
       - region_id    -> the integer id as a string
@@ -31,7 +31,8 @@ from model import GrantInfo, TrustFund, FiscalYear
 # --- Field registry -------------------------------------------------------
 #
 # The canonical set of submission fields, with how each is stored. Derived from
-# the live writers (f4d/edit_results.py ~line 1042, f4d/sections/*, exports.py).
+# the live writers (f4d/sections/*, exports.py; originally the since-removed
+# f4d/edit_results.py -- see git history).
 # "kind" controls encoding only; every value lands in grant_info_long.value.
 
 TEXT = "text"     # raw string
