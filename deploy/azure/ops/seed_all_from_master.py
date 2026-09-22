@@ -25,6 +25,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from connection import create_session
+from f4d.passwords import hash_password
 from model import (
     Team, User, FiscalYear, TrustFund, Indicator, TrustFundIndicatorMapping,
     Region, Country, GrantInfo,
@@ -169,7 +170,7 @@ def main():
                 team = Team(team=f"Team {tfnum}", created_at=NOW, updated_at=NOW)
                 session.add(team); session.flush()
             if not session.query(User).filter_by(username=username).first():
-                session.add(User(username=username, password=f"{tfnum}_p",
+                session.add(User(username=username, password=hash_password(f"{tfnum}_p"),
                                  team_id=team.id, created_at=NOW, updated_at=NOW))
             tf = session.query(TrustFund).filter_by(name=username).first()
             if not tf:

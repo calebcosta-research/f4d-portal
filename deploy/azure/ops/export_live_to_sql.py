@@ -11,6 +11,13 @@ the foreign keys between tables stay valid.
 The output works either way you choose to load it: pasted into the Azure portal
 Query editor, or replayed by a script over a direct connection.
 
+Passwords are hashed on the way out (salted PBKDF2-SHA256, the format
+f4d/passwords.py uses), so the Azure database never holds plain text. The live
+database is only read, never changed. It also writes
+98_hash_existing_passwords.sql, which hashes the passwords in a database that
+was loaded from an older, plain-text export. Set $env:hash_passwords = "no" to
+export passwords unchanged.
+
 Install the driver once:
 
     py -m pip install python-tds
@@ -23,9 +30,12 @@ Run (PowerShell on the VDI):
 
 Files land in .\f4d_export\ -- run them in filename order.
 """
+import base64
 import datetime
 import decimal
+import hashlib
 import os
+import secrets
 import sys
 
 try:
@@ -65,6 +75,22 @@ TABLES = [
 ROWS_PER_INSERT = 200
 # Roughly the largest file worth pasting into a browser editor in one go.
 MAX_FILE_BYTES = 700_000
+
+HASH_PASSWORDS = os.environ.get("hash_passwords", "yes").strip().lower() not in ("no", "false", "0")
+# (user id, hash) for every password hashed, for 98_hash_existing_passwords.sql.
+PASSWORD_UPDATES = []
+
+
+def hash_password(password, iterations=600_000):
+    """Salted PBKDF2-SHA256 in f4d/passwords.py's format.
+
+    A copy, because this script runs on the VDI without the rest of the repo.
+    It must stay in step with f4d/passwords.py, or exported logins won't work.
+    """
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", str(password).encode("utf-8"), salt, iterations)
+    b64 = lambda raw: base64.b64encode(raw).decode("ascii").rstrip("=")
+    return f"pbkdf2_sha256${iterations}${b64(salt)}${b64(digest)}"
 
 
 def sql_literal(v):
@@ -111,6 +137,30 @@ def columns_of(cur, table):
     return cols, has_identity
 
 
+def _hash_row(row, cols):
+    """A users row with its password replaced by a hash (left alone if it
+    already is one), recording the change for the update script."""
+    row = list(row)
+    i, uid = cols.index("password"), row[cols.index("id")]
+    if row[i] and not str(row[i]).startswith("pbkdf2_sha256$"):
+        row[i] = hash_password(row[i])
+        PASSWORD_UPDATES.append((uid, row[i]))
+    return row
+
+
+def write_password_update_script():
+    """98_hash_existing_passwords.sql: for a database already loaded from an
+    older, plain-text export. Only rows still holding plain text are touched,
+    so running it twice is harmless."""
+    with open(os.path.join(OUT_DIR, "98_hash_existing_passwords.sql"), "w", encoding="utf-8") as fh:
+        fh.write("-- Only for a database loaded from an older export that still has\n")
+        fh.write("-- plain-text passwords. Rows already hashed are left alone.\n")
+        for uid, hashed in PASSWORD_UPDATES:
+            fh.write("UPDATE [%s].[users] SET password = %s WHERE id = %s "
+                     "AND LEFT(password, 14) <> N'pbkdf2_sha256$';\n"
+                     % (DST_SCHEMA, sql_literal(hashed), sql_literal(uid)))
+
+
 def write_table(cur, table, index):
     """Dump one table to one or more .sql files. Returns the row count."""
     cols, has_identity = columns_of(cur, table)
@@ -150,6 +200,9 @@ def write_table(cur, table, index):
         if handle is None:
             open_part()
 
+        if table == "users" and HASH_PASSWORDS:
+            batch = [_hash_row(row, cols) for row in batch]
+
         values = ",\n".join(
             "  (" + ", ".join(sql_literal(v) for v in row) + ")" for row in batch
         )
@@ -187,6 +240,9 @@ def main():
     print("Reading %s:%s/%s schema [%s]" % (HOST, PORT, DATABASE, SRC_SCHEMA))
     print("Writing INSERTs targeting schema [%s] into .\\%s\\\n"
           % (DST_SCHEMA, OUT_DIR))
+    if HASH_PASSWORDS:
+        print("Passwords are hashed on export -- about a quarter-second per user,\n"
+              "so the users table takes around half a minute.\n")
 
     conn = pytds.connect(server=HOST, port=PORT, database=DATABASE,
                          user=USER, password=PASSWORD, login_timeout=30)
@@ -208,6 +264,11 @@ def main():
             % (t, counts.get(t, 0), DST_SCHEMA, t) for t in TABLES
         ))
         fh.write(";\n")
+
+    if PASSWORD_UPDATES:
+        write_password_update_script()
+        print("\n%d passwords hashed. 98_hash_existing_passwords.sql updates a database "
+              "loaded from an older export." % len(PASSWORD_UPDATES))
 
     print("\nTotal rows: %d" % sum(counts.values()))
     print("Files are in .\\%s\\ -- run them in filename order." % OUT_DIR)

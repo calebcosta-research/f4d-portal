@@ -15,6 +15,8 @@ import ast
 from connection import create_session
 from model import Country, F4DAssociationEnum, FiscalYear, GrantInfo, Indicator, Region, TrustFund, Team, User, TrustFundIndicatorMapping, delete_team
 from f4d.stored_values import parse_stored
+from f4d.passwords import hash_password, spend_equal_time, verify_password
+from f4d.auth import store_password_hash
 from dotenv import load_dotenv
 import os
 
@@ -73,9 +75,13 @@ def check_credentials(session: Session, username: str, password: str) -> bool:
 
         # Query the user by username
         user = session.query(User).filter_by(username=username).one()
-        return user.password == password
+        ok, needs_rehash = verify_password(user.password, password)
+        if needs_rehash:
+            store_password_hash(session, user, password)
+        return ok
 
     except NoResultFound:
+        spend_equal_time(password)
         return False
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -96,7 +102,11 @@ def display_main_app():
     except Exception as e:
         st.error(f"An error occurred while retrieving users: {e}")
 
-    if current_user.username == super_admin_username and current_user.password ==super_admin_password:
+    # The admin menus need the super-admin account *and* its stored password
+    # matching the configured one -- checked with verify_password, since the
+    # stored value may be a hash.
+    if (current_user.username == super_admin_username
+            and verify_password(current_user.password, super_admin_password)[0]):
         page = st.sidebar.radio("Action:", [
             "Teams", "Users", "Fiscal Years", "Countries", "Regions"
         ])
@@ -254,7 +264,7 @@ def manage_users():
                     new_user = User(
                         username=row['username'] if pd.notna(
                             row['username']) else None,
-                        password=row['password'] if pd.notna(
+                        password=hash_password(str(row['password'])) if pd.notna(
                             row['password']) else None,
 
                         # How to put the id of the team here
@@ -291,7 +301,7 @@ def manage_users():
                             new_user = User(
                                 username=row['username'] if pd.notna(
                                     row['username']) else None,
-                                password=row['password'] if pd.notna(
+                                password=hash_password(str(row['password'])) if pd.notna(
                                     row['password']) else None,
                                 team_id=team_id,
                                 created_at=datetime.datetime.now(),
@@ -334,7 +344,7 @@ def manage_users():
             if submitted:
                 new_user = User(
                     username=username,
-                    password=password,
+                    password=hash_password(password),
                     team_id=team_id,
                     created_at=datetime.datetime.now(),
                     updated_at=datetime.datetime.now()

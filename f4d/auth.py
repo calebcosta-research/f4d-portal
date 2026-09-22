@@ -11,6 +11,22 @@ from f4d.config import (
 )
 from f4d.context import reset_session_state
 from f4d import telemetry
+from f4d.passwords import hash_password, spend_equal_time, verify_password
+
+
+def store_password_hash(session, user, password):
+    """Replace a legacy plain-text (or weaker) stored password with a hash.
+
+    Runs only after a successful check. If it fails the login still goes
+    ahead; the upgrade is simply retried next time.
+    """
+    try:
+        user.password = hash_password(password)
+        session.commit()
+        telemetry.event("password_upgraded", user_id=user.id)
+    except Exception:  # noqa: BLE001 - never block a valid login over this
+        session.rollback()
+        telemetry.log.exception("password upgrade failed")
 
 
 def display_login_form():
@@ -61,9 +77,13 @@ def check_credentials(session: Session, username: str, password: str) -> bool:
 
         # Query the user by username
         user = session.query(User).filter_by(username=username).one()
-        return user.password == password
+        ok, needs_rehash = verify_password(user.password, password)
+        if needs_rehash:
+            store_password_hash(session, user, password)
+        return ok
 
     except NoResultFound:
+        spend_equal_time(password)
         return False
     except Exception as e:
         print(f"An error occurred: {e}")

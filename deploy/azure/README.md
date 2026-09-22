@@ -93,6 +93,23 @@ by default; set `APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL=false` to allow it.
 Browser-side end-user monitoring is not implemented: Streamlit gives the app
 little control over the page's JavaScript.
 
+### Passwords
+
+Stored as salted PBKDF2-SHA256 hashes (`f4d/passwords.py`, standard library
+only). Login still accepts a legacy plain-text value and replaces it with a hash
+on the next successful login, so an older database keeps working while it
+migrates.
+
+`ops/export_live_to_sql.py` hashes passwords on export, so a database loaded
+from it never holds plain text. For one loaded from an older export, run the
+`98_hash_existing_passwords.sql` it writes; it only touches rows still in plain
+text.
+
+**Never write hashed passwords into the live Posit database.** Posit runs `main`,
+which compares plain text, so a hash there locks that user out of the live
+system. That is why `deploy/posit/ops/seed_from_master_pytds.py` still writes
+plain text.
+
 ### Excel export to Blob Storage
 
 `f4d/reporting_export.py` refreshes a workbook in Blob Storage after each save
