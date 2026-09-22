@@ -1,3 +1,6 @@
+import logging
+import threading
+import weakref
 from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -90,6 +93,12 @@ def _build_engine():
 _engine = None
 _Session = None
 
+# Sessions opened by the current thread, so the end of a Streamlit script run
+# can close them -- see close_run_sessions(). Held weakly: a script that never
+# calls close_run_sessions() (the seed and ops scripts) must still get its
+# connections back when a session is garbage-collected, exactly as before.
+_opened = threading.local()
+
 
 def create_session():
     global _engine, _Session
@@ -98,4 +107,28 @@ def create_session():
         # Ensure tables exist (runs once per process, not per session).
         Base.metadata.create_all(_engine)
         _Session = sessionmaker(bind=_engine)
-    return _Session()
+    session = _Session()
+    if not hasattr(_opened, "sessions"):
+        _opened.sessions = weakref.WeakSet()
+    _opened.sessions.add(session)
+    return session
+
+
+def close_run_sessions():
+    """Close every session this thread has opened, returning its connection.
+
+    Called when a Streamlit script run ends. Most of the app opens a session
+    and doesn't close it on every path, so connections used to come back only
+    when Python's garbage collector happened to run. With 15 per process, a
+    burst of activity between collections could exhaust the pool and stall
+    every user for 30 seconds. Closing an already-closed session is harmless.
+    """
+    sessions = getattr(_opened, "sessions", None)
+    if not sessions:
+        return
+    for session in list(sessions):
+        try:
+            session.close()
+        except Exception:  # noqa: BLE001 - one bad close mustn't strand the rest
+            logging.getLogger("f4d").warning("closing a database session failed", exc_info=True)
+    sessions.clear()
