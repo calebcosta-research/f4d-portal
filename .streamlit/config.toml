@@ -1,9 +1,17 @@
-# Streamlit settings for running behind Azure App Service (and other proxies).
+# Streamlit settings for the Azure App Service deployment.
 [server]
 headless = true
 address = "0.0.0.0"
-enableCORS = false
-enableXsrfProtection = false
+# Cross-site request forgery protection, and the origin check Streamlit
+# requires alongside it (it turns CORS back on if XSRF is on). Both were off
+# for an older proxy setup; a security scan flags that.
+#
+# The origin check only accepts the browser's live connection when the page's
+# origin matches the server's Host header. App Service preserves the Host, so
+# this works as is. If a gateway in front rewrites the Host, list the public
+# address here, e.g. corsAllowedOrigins = ["https://f4d.worldbank.org"].
+enableCORS = true
+enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false
