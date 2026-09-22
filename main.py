@@ -18,6 +18,12 @@ st.set_page_config(page_title="F4D Results Reporting", layout="centered")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from f4d.shell import main
+from connection import close_run_sessions
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        # Return every database connection this run opened -- including when
+        # the run ends early with Streamlit's rerun or stop signal.
+        close_run_sessions()
