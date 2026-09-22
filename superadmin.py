@@ -12,7 +12,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import ast
 
-from connection import create_session
+from connection import close_run_sessions, create_session
 from model import Country, F4DAssociationEnum, FiscalYear, GrantInfo, Indicator, Region, TrustFund, Team, User, TrustFundIndicatorMapping, delete_team
 from f4d.stored_values import parse_stored
 from f4d.passwords import hash_password, spend_equal_time, verify_password
@@ -3416,4 +3416,8 @@ def dashboards(team_id):
     session.close()
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        # Return every database connection this run opened.
+        close_run_sessions()

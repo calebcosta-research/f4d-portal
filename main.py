@@ -25,6 +25,7 @@ from f4d import telemetry
 telemetry.setup()
 
 from f4d.shell import main
+from connection import close_run_sessions
 
 if __name__ == "__main__":
     try:
@@ -35,3 +36,7 @@ if __name__ == "__main__":
         # straight through.
         telemetry.log.exception("unhandled error")
         raise
+    finally:
+        # Return every database connection this run opened -- including when
+        # the run ends early with Streamlit's rerun or stop signal.
+        close_run_sessions()
