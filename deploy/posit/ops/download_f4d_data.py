@@ -102,6 +102,12 @@ PORTFOLIO_COLUMNS = []
 #  The trust fund number is tried first, the P-code second.
 PORTFOLIO_TF_COLUMN = "Trust Fund #"
 PORTFOLIO_PCODE_COLUMN = "Project Pcode"
+
+#  The TTL column in the portfolio file. Its names replace the ones stored in the
+#  portal wherever a grant matches a portfolio row, since the portfolio file is
+#  the one kept up to date. Matched by the start of the heading, so the note in
+#  brackets after "F4D TTL Name" can change without breaking this.
+PORTFOLIO_TTL_COLUMN = "F4D TTL Name"
 # =========================================================================== #
 
 import ast
@@ -497,6 +503,11 @@ def read_table(path):
     return []
 
 
+# Where each portfolio row keeps its cleaned TTL name. Not a real heading, so it
+# never becomes an output column.
+TTL_KEY = "\0ttl"
+
+
 def load_portfolio():
     """(path, headings, {tf number: row}, {pcode: row}) for the portfolio file.
 
@@ -558,12 +569,21 @@ def load_portfolio():
     if tf_col is None and pcode_col is None:
         print(f"   ! Portfolio file has no '{PORTFOLIO_TF_COLUMN}' column — not merged.")
         return path, [], {}, {}
+    # Read from the raw headings so it works even if PORTFOLIO_COLUMNS leaves it out.
+    ttl_col = next((i for i, h in enumerate(raw_head)
+                    if h.lower().startswith(PORTFOLIO_TTL_COLUMN.lower())), None)
+    if ttl_col is None:
+        print(f"   ! Portfolio file has no '{PORTFOLIO_TTL_COLUMN}' column — "
+              "TTL names come from the portal instead.")
 
     by_tf, by_pcode = {}, {}
     for row in body:
         def cell(i):
             return row[i] if i is not None and i < len(row) else ""
         values = dict(zip(headings, [cell(i) for i in keep]))
+        # "Fadwa Bennani; Dorothee Delort; " -> "Fadwa Bennani; Dorothee Delort"
+        values[TTL_KEY] = "; ".join(
+            n.strip() for n in str(cell(ttl_col)).split(";") if n.strip())
         for number in str(cell(tf_col)).replace(";", ",").replace("/", ",").split(","):
             key = match_key(number)
             if key:
@@ -645,12 +665,12 @@ def main():
         taken.update(block)
     pf_out_headings = [f"{h} (portfolio)" if h in taken else h for h in pf_headings]
     pf_blank = [""] * len(pf_headings)
-    pf_cache = {}
+    pf_rows, pf_cache = {}, {}
     pf_matched, pf_unmatched = set(), set()
 
-    def portfolio(tid):
-        """The portfolio row for one trust fund, as values in pf_headings order."""
-        if tid not in pf_cache:
+    def pf_row(tid):
+        """The matching portfolio row (a dict) for one trust fund, or None."""
+        if tid not in pf_rows:
             meta = tf.get(tid, {})
             row = None
             for key in portfolio_keys(meta):
@@ -659,9 +679,27 @@ def main():
                     break
             if row is None:
                 row = pf_by_pcode.get(match_key(meta.get("pcode")))
+            pf_rows[tid] = row
+        return pf_rows[tid]
+
+    def portfolio(tid):
+        """The portfolio row for one trust fund, as values in pf_headings order."""
+        if tid not in pf_cache:
+            row = pf_row(tid)
             (pf_matched if row else pf_unmatched).add(gname(tid))
             pf_cache[tid] = [row.get(h, "") for h in pf_headings] if row else pf_blank
         return pf_cache[tid]
+
+    ttl_from_portal = set()
+
+    def ttl(tid):
+        """The grant's TTL: the portfolio file's name when it has one (that file
+        is kept up to date), otherwise whatever the portal has stored."""
+        name = (pf_row(tid) or {}).get(TTL_KEY)
+        if name:
+            return name
+        ttl_from_portal.add(gname(tid))
+        return tf.get(tid, {}).get("ttl") or ""
 
     # --- Read all submissions -------------------------------------------------
     print("Reading submissions ...")
@@ -681,7 +719,7 @@ def main():
         objective as a section field, so it doesn't want the context copy)."""
         c = context.get((tid, fid), {})
         return ([tf.get(tid, {}).get("name", tid), gname(tid),
-                 tf.get(tid, {}).get("ttl", ""), fy.get(fid, fid)]
+                 ttl(tid), fy.get(fid, fid)]
                 + [c.get(f, "") for f, name in CONTEXT if name not in skip])
 
     # Every grant-year that reported anything, and the Strategic Objective &
@@ -785,10 +823,10 @@ def main():
     for _tid, _meta in sorted(tf.items(), key=lambda kv: (kv[1].get("name") or "")):
         p = prog.get(_tid)
         if not p:
-            add(ws_prog, [_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+            add(ws_prog, [_meta.get("name"), gname(_tid), ttl(_tid),
                             "Not Started", "", ""])
         else:
-            add(ws_prog, [_meta.get("name"), gname(_tid), _meta.get("ttl", ""),
+            add(ws_prog, [_meta.get("name"), gname(_tid), ttl(_tid),
                             "Complete" if p["complete"] else "In Progress",
                             str(p["last"])[:19] if p["last"] else "", p["submitted_at"]])
 
@@ -858,7 +896,7 @@ def main():
             # numbered entries are skipped here; they have their own sheets
             # (and are still in All Data raw, exactly as stored).
             shown = region.get(str(value), value) if field == "region_id" else value
-            add(ws_info, [tfnum, grant, tf.get(tid, {}).get("ttl", ""), year,
+            add(ws_info, [tfnum, grant, ttl(tid), year,
                           field, shown])
 
     # Strategic Objective / Lending Operations / Collaboration rows.
@@ -951,6 +989,11 @@ def main():
             print("   No portfolio row for: " + ", ".join(shown[:10])
                   + (f" (+{len(shown) - 10} more)" if len(shown) > 10 else ""))
             print("   Those rows still export; their portfolio columns are blank.")
+    if ttl_from_portal:
+        shown = sorted(ttl_from_portal)
+        print("TTL names taken from the portal (no portfolio TTL) for: "
+              + ", ".join(shown[:10])
+              + (f" (+{len(shown) - 10} more)" if len(shown) > 10 else ""))
     print("Open that file in Excel. (Read-only — nothing in the database changed.)")
 
 
