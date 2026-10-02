@@ -51,6 +51,10 @@ def check_credentials(session: Session, username: str, password: str) -> bool:
 
         # Query the user by username
         user = session.query(User).filter_by(username=username).one()
+        # A dropped grant's login stays in the table (soft delete) but must
+        # no longer get in.
+        if user.deleted:
+            return False
         return user.password == password
 
     except NoResultFound:

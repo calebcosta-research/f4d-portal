@@ -147,14 +147,24 @@ def focus(cur, tf):
     S = SCHEMA
     print(f"\nFocus on grant matching '{tf}':\n")
     # [grant] must be bracketed -- GRANT is a reserved T-SQL keyword.
-    cur.execute(f"SELECT id, name, [grant], ttl FROM {S}.trustfunds "
-                f"WHERE deleted=0 AND name LIKE %s", ("%" + tf + "%",))
+    # Dropped grants are listed too (flagged), and the number is looked for in
+    # the grant column as well as the login name, so a grant that "isn't in the
+    # export" shows up here with the reason.
+    cur.execute(f"SELECT id, name, [grant], ttl, team_id, deleted FROM {S}.trustfunds "
+                f"WHERE name LIKE %s OR [grant] LIKE %s",
+                ("%" + tf + "%", "%" + tf + "%"))
     matches = cur.fetchall()
+    cur.execute(f"SELECT username, team_id, deleted FROM {S}.users WHERE username LIKE %s",
+                ("%" + tf + "%",))
+    logins = cur.fetchall()
+    for username, team_id, deleted in logins:
+        print(f"  login {username}  team={team_id}" + ("  (DROPPED)" if deleted else ""))
     if not matches:
-        print("  No trust fund whose name contains that text.")
+        print("  No trust fund whose name or grant number contains that text.")
         return
-    for tid, name, grant, ttl in matches:
-        print(f"  [{tid}] {name}   ttl={ttl or '-'}")
+    for tid, name, grant, ttl, team_id, deleted in matches:
+        print(f"  [{tid}] {name}   ttl={ttl or '-'}   team={team_id}"
+              + ("   ** DROPPED (deleted=1) -- left out of the export **" if deleted else ""))
         print(f"        {grant or ''}")
         cur.execute(
             f"SELECT f.fy, g.field, g.updated_at, g.value "

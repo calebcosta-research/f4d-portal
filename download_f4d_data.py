@@ -168,8 +168,46 @@ def decode(value):
         try:
             return ast.literal_eval(value)
         except (ValueError, SyntaxError):
+            pass
+        # A date answer is saved as datetime.date(2025, 6, 30) and a blank
+        # number as nan, both of which literal_eval refuses -- and that used to
+        # drop the grant's whole section from the export.
+        try:
+            return _literal(ast.parse(value.strip(), mode="eval").body)
+        except (ValueError, SyntaxError, TypeError, RecursionError):
             return {}
     return {}
+
+
+_CONSTRUCTORS = {"datetime.date": datetime.date,
+                 "datetime.datetime": datetime.datetime,
+                 "datetime.time": datetime.time}
+_NAMES = {"nan": float("nan"), "inf": float("inf"),
+          "None": None, "True": True, "False": False}
+
+
+def _literal(node):
+    """literal_eval plus date/time constructors and nan/inf. Builds data only."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name) and node.id in _NAMES:
+        return _NAMES[node.id]
+    if isinstance(node, ast.Dict) and None not in node.keys:
+        return {_literal(k): _literal(v) for k, v in zip(node.keys, node.values)}
+    if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+        return [_literal(e) for e in node.elts]
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        operand = _literal(node.operand)
+        if isinstance(operand, (int, float)) and not isinstance(operand, bool):
+            return -operand if isinstance(node.op, ast.USub) else operand
+    if (isinstance(node, ast.Call) and not node.keywords
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)):
+        ctor = _CONSTRUCTORS.get(f"{node.func.value.id}.{node.func.attr}")
+        args = [_literal(a) for a in node.args]
+        if ctor and all(isinstance(a, int) and not isinstance(a, bool) for a in args):
+            return ctor(*args)
+    raise ValueError(f"unsupported value: {type(node).__name__}")
 
 
 # --------------------------------------------------------------------------- #
@@ -453,6 +491,9 @@ def cell_for_excel(value):
     else as text with lists flattened and control characters removed. A list,
     or a single stray character pasted into a text box, used to abort the
     whole export."""
+    if isinstance(value, float) and value != value or value in (
+            float("inf"), float("-inf")):
+        return None  # Excel calls a file with nan / inf in it corrupt
     if value is None or isinstance(value, (int, float, bool,
                                            datetime.datetime, datetime.date)):
         return value
@@ -850,6 +891,11 @@ def main():
     cur.execute(f"SELECT trustfund_id, fiscal_year_id, field, value, updated_at "
                 f"FROM {SCHEMA}.grant_info_long WHERE deleted=0")
     rows = cur.fetchall()
+    # Answers saved under a grant that has since been dropped (trustfunds.deleted)
+    # stay in the table; leave them out, along with the grant itself.
+    dropped_rows = sum(1 for r in rows if r[0] not in tf)
+    rows = [r for r in rows if r[0] in tf]
+    unreadable = []  # (grant, fiscal year, section) whose saved answers won't parse
 
     context = {}
     for _tid, _fid, _field, _value, _upd in rows:
@@ -1014,6 +1060,9 @@ def main():
         add(ws_raw, [tfnum, grant, year, field, value,
                      str(updated)[:19] if updated else ""])
 
+        if field in BLOB_FIELDS and value and not decode(value):
+            unreadable.append((tfnum, year, field))
+
         if field == "deliverables":
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
@@ -1136,6 +1185,16 @@ def main():
             print("   No portfolio row for: " + ", ".join(shown[:10])
                   + (f" (+{len(shown) - 10} more)" if len(shown) > 10 else ""))
             print("   Those rows still export; their portfolio columns are blank.")
+    if dropped_rows:
+        print(f"Left out {dropped_rows} saved answers belonging to grants that "
+              "were dropped from the portal.")
+    if unreadable:
+        print("")
+        print(f"!! {len(unreadable)} saved section(s) could not be read, so their "
+              "deliverables/results are missing from the file:")
+        for grant_no, year, field in unreadable[:20]:
+            print(f"     {grant_no}  {year}  {field}")
+        print("   Run  py verify_saves_pytds.py <TF number>  for detail, and send it to Caleb.")
     if master_path:
         print(f"Standard indicators (SI_2 - SI_4) found in the master workbook for "
               f"{std_matched} of {std_matched + std_unmatched} deliverables/results "
