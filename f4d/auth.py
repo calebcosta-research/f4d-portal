@@ -77,6 +77,11 @@ def check_credentials(session: Session, username: str, password: str) -> bool:
 
         # Query the user by username
         user = session.query(User).filter_by(username=username).one()
+        # A dropped grant's login stays in the table (soft delete) but must
+        # no longer get in.
+        if user.deleted:
+            spend_equal_time(password)
+            return False
         ok, needs_rehash = verify_password(user.password, password)
         if needs_rehash:
             store_password_hash(session, user, password)
