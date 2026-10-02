@@ -15,6 +15,11 @@ matched to each portal entry by trust fund number, and onto the Strategic
 Objective, Lending Operations and Collaboration sheets the same way. Point
 PORTFOLIO_DATA_PATH (the first setting below) at your copy of that file.
 
+Every deliverable and result also carries the standard indicators it maps to
+(standard_indicator, SI_2, SI_3, SI_4). The first is stored in the portal; the
+other three are read from the master workbook the indicators were loaded from
+(MASTER_DATA_PATH below).
+
 Uses python-tds (``import pytds``) + openpyxl — the pure-Python tools that work on
 the locked-down VDI and on a normal machine after a one-time
 ``pip install python-tds openpyxl``.
@@ -92,6 +97,17 @@ PORTFOLIO_SHEET = "Project details"
 #  run the script from; if that folder can't be written to, the script tries
 #  your Desktop and then the Windows temp folder, and prints where it landed.
 OUTPUT_FOLDER = r""
+
+#  The master workbook the indicators were loaded from (F4D_rd_master.xlsx).
+#  Its standard_indicator / SI_2 / SI_3 / SI_4 columns are copied onto the
+#  Deliverables and Results Indicators sheets; the portal stores only the first
+#  of the four, so the other three can only come from this file.
+#  Leave it as "" to use the F4D_MASTER environment variable, or else to look in
+#  this script's folder, the folder above it, the folder you are running from
+#  and the place the loader reads it from, for a file whose name contains
+#  "rd_master". If it isn't found the export still runs; SI_2 - SI_4 are blank.
+MASTER_DATA_PATH = r""
+MASTER_DEFAULT_LOCATIONS = [r"C:\Users\wb620297\f4d\F4D_rd_master.xlsx"]
 
 #  Which portfolio columns to add to the export. Empty list = all of them.
 #  To keep the sheets narrow, list the exact headings you want instead, e.g.
@@ -196,11 +212,17 @@ CONTEXT = [
 ctx_headers = [name for _, name in CONTEXT]
 ctx_fields = {f for f, _ in CONTEXT}
 
+# The standard indicators each deliverable / result maps to, named as in the
+# master workbook. An entry can map to up to four.
+STANDARD_HEADERS = ["standard_indicator", "SI_2", "SI_3", "SI_4"]
+
 DELIVERABLE_HEADERS = [
-    "Deliverable", "Progress / Status", "Target #", "Number Completed",
+    "Deliverable"] + STANDARD_HEADERS + [
+    "Progress / Status", "Target #", "Number Completed",
     "Description", "Next Steps", "Photos/Materials?"]
 RESULT_HEADERS = [
-    "Indicator", "Unit", "Progress Value", "Explanation", "Baseline",
+    "Indicator"] + STANDARD_HEADERS + [
+    "Unit", "Progress Value", "Explanation", "Baseline",
     "Baseline Yr", "Target", "Target Yr", "Level of Result", "Data Collection"]
 OPERATION_HEADERS = [
     "Entry", "Entry #", "Informed?", "P Number", "Instrument",
@@ -594,6 +616,82 @@ def load_portfolio():
     return path, headings, by_tf, by_pcode
 
 
+# --------------------------------------------------------------------------- #
+# Master workbook — the standard indicators each deliverable / result maps to  #
+# --------------------------------------------------------------------------- #
+# Which tab holds which kind of entry, and the code the loader put in each
+# indicator's indicator_id for it ("TF0B9226-D3" = 3rd deliverable of TF0B9226).
+MASTER_SHEETS = (("Deliverables", "Deliverable name", "D"),
+                 ("Results", "Indicator name", "RI"))
+
+
+def find_master_file():
+    """Locate F4D_rd_master.xlsx. Returns a path, or None if there isn't one."""
+    given = (os.environ.get("F4D_MASTER") or MASTER_DATA_PATH or "").strip().strip('"')
+    if given:
+        given = os.path.expanduser(given)
+        if os.path.isfile(given):
+            return given
+        print(f"   ! MASTER_DATA_PATH points at something that isn't there: {given}")
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    for folder in (here, os.path.dirname(here), os.getcwd()):
+        hits = [f for f in glob.glob(os.path.join(folder, "*.xlsx"))
+                if "rd_master" in os.path.basename(f).lower()
+                and not os.path.basename(f).startswith("~$")]
+        if hits:
+            return max(hits, key=os.path.getmtime)
+    return next((p for p in MASTER_DEFAULT_LOCATIONS if os.path.isfile(p)), None)
+
+
+def name_key(value):
+    """Indicator names compared ignoring case and runs of spaces."""
+    return " ".join(str(value or "").split()).lower()
+
+
+def load_master():
+    """(path, {(tf, kind, n): (name, values)}, {(tf, kind, name): values}).
+
+    `values` is the row's [standard_indicator, SI_2, SI_3, SI_4]. Rows are
+    numbered exactly as the loader numbered them (per trust fund, blank names
+    skipped, the first number of a "TF0A1111, TF0A2222" cell), so the n-th row
+    lines up with indicator_id "<tf>-D<n>" / "<tf>-RI<n>". Names that appear
+    twice under one trust fund are left out of the by-name index.
+    """
+    path = find_master_file()
+    if not path:
+        return None, {}, {}
+    from openpyxl import load_workbook
+    book = load_workbook(path, read_only=True, data_only=True)
+    by_pos, by_name = {}, {}
+    for sheet, name_col, kind in MASTER_SHEETS:
+        if sheet not in book.sheetnames:
+            print(f"   ! Master workbook has no {sheet!r} tab.")
+            continue
+        rows = book[sheet].iter_rows(values_only=True)
+        head = [clean_cell(h) for h in next(rows, [])]
+        col = {h: i for i, h in enumerate(head) if h}
+
+        def cell(row, heading):
+            i = col.get(heading)
+            return clean_cell(row[i]) if i is not None and i < len(row) else ""
+
+        counts = {}
+        for row in rows:
+            name = cell(row, name_col)
+            tf_cell = cell(row, "Trust Fund Number")
+            if not name or not tf_cell:
+                continue
+            tfnum = match_key(tf_cell.split(",")[0])
+            counts[(tf_cell, kind)] = n = counts.get((tf_cell, kind), 0) + 1
+            values = [cell(row, h) for h in STANDARD_HEADERS]
+            by_pos[(tfnum, kind, n)] = (name, values)
+            key = (tfnum, kind, name_key(name))
+            by_name[key] = None if key in by_name else values
+    book.close()
+    return path, by_pos, by_name
+
+
 def portfolio_keys(meta):
     """Trust fund numbers to try for one portal grant, best first.
 
@@ -628,6 +726,13 @@ def main():
         print("Portfolio data: not found — the export will run without those columns.")
         print("   Set PORTFOLIO_DATA_PATH at the top of this file to add them.")
 
+    master_path, master_by_pos, master_by_name = load_master()
+    if master_path:
+        print(f"Master workbook (standard indicators): {master_path}")
+    else:
+        print("Master workbook: not found — SI_2, SI_3 and SI_4 will be blank.")
+        print("   Set MASTER_DATA_PATH at the top of this file to add them.")
+
     conn = connect()
     cur = conn.cursor()
 
@@ -637,8 +742,10 @@ def main():
           for r in cur.fetchall()}
     cur.execute(f"SELECT id, fy FROM {SCHEMA}.fys WHERE deleted=0")
     fy = {r[0]: r[1] for r in cur.fetchall()}
-    cur.execute(f"SELECT id, indicator_name, unit_of_measurement FROM {SCHEMA}.indicators")
-    ind = {r[0]: {"name": r[1], "unit": r[2]} for r in cur.fetchall()}
+    cur.execute(f"SELECT id, indicator_name, unit_of_measurement, indicator_id, "
+                f"standard_indicator_name FROM {SCHEMA}.indicators")
+    ind = {r[0]: {"name": r[1], "unit": r[2], "code": r[3] or "", "std": r[4] or ""}
+           for r in cur.fetchall()}
     cur.execute(f"SELECT id, region FROM {SCHEMA}.regions")
     region = {str(r[0]): r[1] for r in cur.fetchall()}
 
@@ -654,6 +761,43 @@ def main():
             return ind.get(int(key), {}).get("name") or f"Indicator {key}"
         except (TypeError, ValueError):
             return f"Indicator {key}"
+
+    std_matched = std_unmatched = 0
+
+    def standards(key, kind):
+        """[standard_indicator, SI_2, SI_3, SI_4] for one deliverable / result.
+
+        The master row is found by the indicator's loader code ("TF0B9226-D3"),
+        checked against its name; if the name differs (rows reordered since the
+        load) it falls back to the name alone. The portal's own standard
+        indicator wins over the workbook's, since an admin may have changed it.
+        TTL-added entries have no indicator row and no master row.
+        """
+        nonlocal std_matched, std_unmatched
+        try:
+            meta = ind.get(int(key))
+        except (TypeError, ValueError):
+            meta = None
+        if not meta:
+            return [""] * len(STANDARD_HEADERS)
+        tfnum, _, seq = meta["code"].rpartition("-")
+        tfnum = match_key(tfnum)
+        values = None
+        n = seq[len(kind):]
+        if seq.startswith(kind) and n.isdigit():
+            hit = master_by_pos.get((tfnum, kind, int(n)))
+            if hit and name_key(hit[0]) == name_key(meta["name"]):
+                values = hit[1]
+        if values is None:
+            values = master_by_name.get((tfnum, kind, name_key(meta["name"])))
+        if master_path:
+            if values:
+                std_matched += 1
+            else:
+                std_unmatched += 1
+        values = list(values or [""] * len(STANDARD_HEADERS))
+        values[0] = meta["std"] or values[0]
+        return values
 
     # Portfolio columns for a grant: matched on trust fund number, then P-code.
     # Headings that clash with a column the export already has are suffixed.
@@ -874,8 +1018,9 @@ def main():
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                add(ws_del, prefix(tid, fid) + [
-                    iname(key, d), d.get("input_value", ""), d.get("progress", ""),
+                add(ws_del, prefix(tid, fid) + [iname(key, d)]
+                    + standards(key, "D") + [
+                    d.get("input_value", ""), d.get("progress", ""),
                     d.get("deliverable_quantity", ""), d.get("description", ""),
                     d.get("next_steps", ""), d.get("supporting_materials_url", "")]
                     + strategic_summary(tid, fid) + summary(tid, fid)
@@ -884,8 +1029,9 @@ def main():
             for key, d in decode(value).items():
                 if not isinstance(d, dict) or d.get("archived"):
                     continue
-                add(ws_res, prefix(tid, fid) + [
-                    iname(key, d), d.get("unit", ""), d.get("input_value", ""),
+                add(ws_res, prefix(tid, fid) + [iname(key, d)]
+                    + standards(key, "RI") + [
+                    d.get("unit", ""), d.get("input_value", ""),
                     d.get("progress", ""), d.get("baseline_value", ""),
                     d.get("year_baseline", ""), d.get("target_value", ""),
                     d.get("year_target", ""), d.get("level_of_result", ""),
@@ -937,6 +1083,7 @@ def main():
     # column widths by header name (robust to the added context columns)
     WIDE = {"Grant Name": 34, "TTL": 20, "Strategic Objective": 48, "Description": 45,
             "Next Steps": 34, "Explanation": 40, "Deliverable": 34, "Indicator": 34,
+            "standard_indicator": 34, "SI_2": 34, "SI_3": 34, "SI_4": 34,
             "Pillars": 30, "Cross-Cutting Themes": 28, "F4D Association": 28,
             "Country": 18, "Region": 22, "Product Line": 14, "Data Collection": 22,
             "Value": 60, "Field": 22, "Status": 13, "Last Updated": 20, "Submitted At": 20,
@@ -989,6 +1136,10 @@ def main():
             print("   No portfolio row for: " + ", ".join(shown[:10])
                   + (f" (+{len(shown) - 10} more)" if len(shown) > 10 else ""))
             print("   Those rows still export; their portfolio columns are blank.")
+    if master_path:
+        print(f"Standard indicators (SI_2 - SI_4) found in the master workbook for "
+              f"{std_matched} of {std_matched + std_unmatched} deliverables/results "
+              "rows. TTL-added entries aren't in that file, so theirs are blank.")
     if ttl_from_portal:
         shown = sorted(ttl_from_portal)
         print("TTL names taken from the portal (no portfolio TTL) for: "
