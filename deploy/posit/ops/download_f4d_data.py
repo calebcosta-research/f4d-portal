@@ -107,7 +107,12 @@ OUTPUT_FOLDER = r""
 #  and the place the loader reads it from, for a file whose name contains
 #  "rd_master". If it isn't found the export still runs; SI_2 - SI_4 are blank.
 MASTER_DATA_PATH = r""
-MASTER_DEFAULT_LOCATIONS = [r"C:\Users\wb620297\f4d\F4D_rd_master.xlsx"]
+#  Tried in order after those folders; the first one that exists is used.
+MASTER_DEFAULT_LOCATIONS = [
+    # Sara
+    r"C:\Users\wb293537\OneDrive - WBG\Shortcuts\WKPDE Files - F4D\7. Monitoring & Evaluation\F4D_rd_master.xlsx",
+    r"C:\Users\wb620297\f4d\F4D_rd_master.xlsx",
+]
 
 #  Which portfolio columns to add to the export. Empty list = all of them.
 #  To keep the sheets narrow, list the exact headings you want instead, e.g.
