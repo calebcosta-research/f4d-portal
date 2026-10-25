@@ -43,6 +43,10 @@ def _build_engine():
                                       Driver 17.3+ or 18 on the host. Set
                                       sql_msi_client_id for a user-assigned
                                       identity; omit it for system-assigned.
+      sql_auth=token               -> managed identity via azure-identity's
+                                      DefaultAzureCredential, token passed to
+                                      the driver (ITS's standard pattern).
+                                      sql_msi_client_id is optional here.
     """
     backend = _setting("db_backend", "postgres").lower()
 
@@ -123,6 +127,46 @@ def _build_engine():
             "mssql+pyodbc:///?odbc_connect=" + quote_plus(odbc),
             pool_pre_ping=True, pool_recycle=1800, fast_executemany=True,
         )
+
+    if auth in ("token", "default_credential"):
+        # ITS's pattern: azure-identity's DefaultAzureCredential fetches the
+        # token in Python and hands it to the driver as an access token
+        # (SQL_COPT_SS_ACCESS_TOKEN = 1256). The string must then carry no
+        # Authentication=, UID or PWD. Tokens expire after about an hour, so a
+        # fresh one is supplied for every new pooled connection; the
+        # credential caches it until it nears expiry.
+        import struct
+        from azure.identity import DefaultAzureCredential
+        from sqlalchemy import event
+
+        odbc_driver = _setting("sql_odbc_driver", "ODBC Driver 18 for SQL Server")
+        odbc = ";".join([
+            f"Driver={{{odbc_driver}}}",
+            f"Server=tcp:{host},{port}",
+            f"Database={database}",
+            "Encrypt=yes",
+            "TrustServerCertificate=no",
+            "Connection Timeout=30",
+        ]) + ";"
+        # Optional: only needed if the host has no system-assigned identity
+        # and doesn't set AZURE_CLIENT_ID itself.
+        client_id = _setting("sql_msi_client_id")
+        credential = (DefaultAzureCredential(managed_identity_client_id=client_id)
+                      if client_id else DefaultAzureCredential())
+        engine = create_engine(
+            "mssql+pyodbc:///?odbc_connect=" + quote_plus(odbc),
+            pool_pre_ping=True, pool_recycle=1800, fast_executemany=True,
+        )
+
+        @event.listens_for(engine, "do_connect")
+        def _supply_token(dialect, conn_rec, cargs, cparams):
+            token = credential.get_token("https://database.windows.net/.default").token
+            token_bytes = token.encode("UTF-16-LE")
+            cparams["attrs_before"] = {
+                1256: struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+            }
+
+        return engine
 
     # SQL username/password over pyodbc -- what the live Posit Connect
     # deployment uses. Keep this unchanged.

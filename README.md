@@ -62,7 +62,7 @@ the application code:
 |---|---|
 | `db_backend` | `mssql`, `postgres`, or `sqlite` |
 | `sql_driver` | for `mssql` only: `pyodbc` (needs a system ODBC driver) or `pymssql` (self-contained) |
-| `sql_auth` | for `mssql` + `pyodbc` only: `sql` (username and password, the default) or `msi` (Azure managed identity, no password) |
+| `sql_auth` | for `mssql` + `pyodbc` only: `sql` (username and password, the default) `msi` (Azure managed identity, no password), or `token` (managed identity via azure-identity's DefaultAzureCredential) |
 | `sql_host`, `sql_port`, `sql_username`, `sql_password`, `sql_database` | connection details |
 | `db_schema` | schema to namespace the tables into; blank for sqlite and postgres |
 

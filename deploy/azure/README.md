@@ -65,6 +65,10 @@ everywhere, so no code changes when switching backends:
   with `odbcinst -q -d` — and the identity must reach the database, e.g. via
   the WB READER/WRITER AD groups, *provided those groups are themselves
   database users*.
+- **Azure SQL, managed identity via DefaultAzureCredential** (ITS's standard
+  pattern): as above but `sql_auth=token`. The app fetches the token with
+  azure-identity and passes it to the driver. `sql_msi_client_id` is optional;
+  set it only if token fetching fails because the host has no default identity.
 - **Azure SQL, SQL login:** `db_backend=mssql`, `sql_driver=pymssql`,
   `sql_port=1433`, plus `sql_host` / `sql_username` / `sql_password` /
   `sql_database`, and `db_schema=dbo`. Works on the stock image.
