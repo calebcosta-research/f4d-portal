@@ -74,7 +74,9 @@ TABLES = [
 # keeps individual statements small enough for the portal's Query editor.
 ROWS_PER_INSERT = 200
 # Roughly the largest file worth pasting into a browser editor in one go.
-MAX_FILE_BYTES = 700_000
+# 700 KB proved too big from the VDI: the paste was cut short mid-string and
+# the Query editor reported unclosed quotes. Override with $env:max_file_kb.
+MAX_FILE_BYTES = int(os.environ.get("max_file_kb", "150")) * 1000
 
 HASH_PASSWORDS = os.environ.get("hash_passwords", "yes").strip().lower() not in ("no", "false", "0")
 # (user id, hash) for every password hashed, for 98_hash_existing_passwords.sql.
