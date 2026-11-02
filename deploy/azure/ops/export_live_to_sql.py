@@ -35,6 +35,7 @@ import datetime
 import decimal
 import hashlib
 import os
+import re
 import secrets
 import sys
 
@@ -116,8 +117,19 @@ def sql_literal(v):
         return "'" + v.isoformat() + "'"
     if isinstance(v, (bytes, bytearray)):
         return "0x" + bytes(v).hex()
-    # N'' so unicode survives; double up embedded quotes.
-    return "N'" + str(v).replace("'", "''") + "'"
+    s = str(v)
+    if _PLAIN_TEXT.fullmatch(s):
+        return "N'" + s + "'"
+    # Anything with a quote, a curly quote or a control character goes as
+    # UTF-16 hex: pasted through the VDI clipboard, text like that arrived cut
+    # short ("Unclosed quotation mark"). Hex is plain ASCII and can't be
+    # mangled, and SQL Server reads it back as the identical nvarchar.
+    return "CAST(0x" + s.encode("utf-16-le").hex() + " AS NVARCHAR(MAX))"
+
+
+# Printable ASCII without the single quote. Newlines go as hex too, since a
+# paste can silently turn \n into \r\n.
+_PLAIN_TEXT = re.compile(r"[\x20-\x26\x28-\x7e]*")
 
 
 def columns_of(cur, table):
