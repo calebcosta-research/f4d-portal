@@ -13,5 +13,13 @@ address = "0.0.0.0"
 enableCORS = true
 enableXsrfProtection = true
 
+[client]
+# Users see a generic "something went wrong" message; the traceback, server
+# paths and database errors go to the log only. A scan flags anything more as
+# information disclosure.
+showErrorDetails = "none"
+# No rerun / clear-cache / settings items in the menu for users.
+toolbarMode = "viewer"
+
 [browser]
 gatherUsageStats = false

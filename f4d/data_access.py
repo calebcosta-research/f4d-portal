@@ -2,6 +2,7 @@
 import ast
 import datetime
 import streamlit as st
+from f4d import telemetry
 from f4d.stored_values import parse_stored
 from model import (
     GrantInfo,
@@ -86,8 +87,11 @@ def get_long_format_value(session, trustfund_id, fiscal_year_id, field_name, def
             return result.value if result.value is not None else default_value
         else:
             return default_value
-    except Exception as e:
-        st.error(f"Error retrieving {field_name}: {e}")
+    except Exception:
+        # Details to the log only -- the raw database error would show users
+        # server and query internals.
+        telemetry.log.exception("reading %s failed", field_name)
+        st.error(f"Could not load {field_name}. Please try again.")
         return default_value
 
 
@@ -124,7 +128,8 @@ def update_long_format_field(session, trustfund_id, fiscal_year_id, field_name, 
         
     except Exception as e:
         session.rollback()
-        st.error(f"Error updating {field_name}: {e}")
+        telemetry.log.exception("saving %s failed", field_name)
+        st.error(f"Could not save {field_name}. Please try again.")
 
 
 def delete_long_format_field(session, trustfund_id, fiscal_year_id):
@@ -157,7 +162,8 @@ def get_long_format_dict(session, trustfund_id, fiscal_year_id, field_name, defa
             return parse_stored(value_str)
         else:
             return default_dict
-    except Exception as e:
-        st.error(f"Error parsing {field_name} dictionary: {e}")
+    except Exception:
+        telemetry.log.exception("parsing %s failed", field_name)
+        st.error(f"Could not load {field_name}. Please try again.")
         return default_dict
 
